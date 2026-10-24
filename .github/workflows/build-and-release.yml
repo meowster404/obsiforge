@@ -40,9 +40,22 @@ jobs:
         run: npm run build
 
       - name: Compile Windows .EXE via electron-builder
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --x64 --ia32 --arm64
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            Write-Host "Compiling Windows binaries via electron-builder (Attempt $i of 3)..."
+            npx electron-builder --win --x64 --ia32 --arm64
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Compilation succeeded on Attempt $i."
+              exit 0
+            }
+            Write-Warning "Attempt $i hit network/TLS timeout (Exit code: $LASTEXITCODE). Retrying in 12 seconds..."
+            Start-Sleep -Seconds 12
+          }
+          Write-Error "electron-builder failed after 3 attempts."
+          exit 1
 
       - name: Upload Installer Artifacts
         uses: actions/upload-artifact@v4
