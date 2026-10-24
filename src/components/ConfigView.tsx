@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ServerConfig, JavaRuntime, WorldInfo } from '../types/electron';
 import { generateObsiForgeAddress } from '../services/neonAuth';
-import { Settings, Globe, Cpu, Save, RefreshCw, AlertCircle, Check, Folder, AlertTriangle, Sparkles, Flame, Moon, Compass, Copy, Trash2 } from 'lucide-react';
+import { Settings, Globe, Cpu, Save, RefreshCw, Check, Folder, AlertTriangle, Sparkles, Flame, Moon, Compass, Trash2 } from 'lucide-react';
 
 interface ConfigViewProps {
   server: ServerConfig | null;
@@ -19,28 +19,6 @@ export const ConfigView: React.FC<ConfigViewProps> = ({ server, onUpdateServerCo
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetConfirmInput, setResetConfirmInput] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  // Load properties and detected java runtimes
-  useEffect(() => {
-    if (!server) return;
-    loadProperties();
-    loadJavaRuntimes();
-    loadWorldInfo();
-  }, [server]);
-
-  const loadProperties = async () => {
-    if (!server) return;
-    setLoading(true);
-    try {
-      const p = await window.mcServerAPI.getProperties(server.id);
-      setProperties(p);
-    } catch (e) {
-      console.error('Error reading properties:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadJavaRuntimes = async () => {
     try {
@@ -63,6 +41,30 @@ export const ConfigView: React.FC<ConfigViewProps> = ({ server, onUpdateServerCo
       setWorldLoading(false);
     }
   };
+
+  // Load properties and detected java runtimes
+  useEffect(() => {
+    if (!server) return;
+    let isCancelled = false;
+
+    window.mcServerAPI.getProperties(server.id)
+      .then(p => { if (!isCancelled) setProperties(p); })
+      .catch(e => console.error('Error reading properties:', e));
+
+    window.mcServerAPI.detectJavaRuntimes()
+      .then(list => { if (!isCancelled) setJavaRuntimes(list); })
+      .catch(e => console.error('Error detecting java runtimes:', e));
+
+    if (window.mcServerAPI?.getWorldInfo) {
+      window.mcServerAPI.getWorldInfo(server.id)
+        .then(info => { if (!isCancelled) setWorldInfo(info); })
+        .catch(e => console.error('Error reading world info:', e));
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [server]);
 
   const handlePropertyChange = (key: string, value: string) => {
     setProperties(prev => ({ ...prev, [key]: value }));

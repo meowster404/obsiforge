@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ServerConfig, CrashReport } from '../types/electron';
-import { ShieldAlert, RotateCw, AlertTriangle, FileText, CheckCircle, RefreshCw } from 'lucide-react';
+import { RotateCw, CheckCircle, RefreshCw } from 'lucide-react';
 
 interface WatchdogViewProps {
   server: ServerConfig | null;
@@ -10,26 +10,34 @@ interface WatchdogViewProps {
 export const WatchdogView: React.FC<WatchdogViewProps> = ({ server, onUpdateServerConfig }) => {
   const [crashReports, setCrashReports] = useState<CrashReport[]>([]);
   const [selectedReport, setSelectedReport] = useState<CrashReport | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const loadCrashReports = async () => {
+  const loadCrashReports = useCallback(async () => {
     if (!server) return;
-    setLoading(true);
     try {
       const reports = await window.mcServerAPI.getCrashReports(server.id);
       setCrashReports(reports);
-      if (reports.length > 0 && !selectedReport) {
-        setSelectedReport(reports[0]);
-      }
+      setSelectedReport(prev => prev || (reports.length > 0 ? reports[0] : null));
     } catch (e) {
       console.error('Error loading crash reports:', e);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [server]);
 
   useEffect(() => {
-    loadCrashReports();
+    if (!server) return;
+    let isCancelled = false;
+    window.mcServerAPI.getCrashReports(server.id)
+      .then(reports => {
+        if (!isCancelled) {
+          setCrashReports(reports);
+          setSelectedReport(prev => prev || (reports.length > 0 ? reports[0] : null));
+        }
+      })
+      .catch(e => {
+        console.error('Error loading crash reports:', e);
+      });
+    return () => {
+      isCancelled = true;
+    };
   }, [server]);
 
   // Automated Crash Root Cause Diagnoser

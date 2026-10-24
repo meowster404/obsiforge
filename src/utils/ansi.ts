@@ -4,7 +4,7 @@ export interface StyledSegment {
   bold?: boolean;
 }
 
-const MC_COLORS: Record<string, string> = {
+export const MC_COLORS: Record<string, string> = {
   '0': '#000000', // Black
   '1': '#0000AA', // Dark Blue
   '2': '#00AA00', // Dark Green
@@ -29,6 +29,7 @@ const MC_COLORS: Record<string, string> = {
  */
 export function cleanMinecraftText(raw: string): string {
   return raw
+    // eslint-disable-next-line no-control-regex
     .replace(/\x1b\[[0-9;]*m/g, '') // Strip ANSI
     .replace(/§[0-9a-fk-or]/gi, ''); // Strip section codes
 }

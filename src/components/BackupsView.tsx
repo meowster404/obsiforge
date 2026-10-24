@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ServerConfig, BackupItem } from '../types/electron';
-import { Archive, Plus, RotateCcw, Trash2, Clock, Check, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Archive, Plus, RotateCcw, Trash2, RefreshCw } from 'lucide-react';
 
 interface BackupsViewProps {
   server: ServerConfig | null;
@@ -14,7 +14,7 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ server }) => {
   const [statusMsg, setStatusMsg] = useState('');
   const [autoSchedule, setAutoSchedule] = useState<'off' | '2h' | '6h' | '24h'>('off');
 
-  const loadBackups = async () => {
+  const refreshBackups = useCallback(async () => {
     if (!server) return;
     try {
       const list = await window.mcServerAPI.listBackups(server.id);
@@ -22,10 +22,21 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ server }) => {
     } catch (e) {
       console.error('Failed listing backups:', e);
     }
-  };
+  }, [server]);
 
   useEffect(() => {
-    loadBackups();
+    if (!server) return;
+    let isCancelled = false;
+    window.mcServerAPI.listBackups(server.id)
+      .then(list => {
+        if (!isCancelled) setBackups(list);
+      })
+      .catch(e => {
+        console.error('Failed listing backups:', e);
+      });
+    return () => {
+      isCancelled = true;
+    };
   }, [server]);
 
   const handleCreateSnapshot = async () => {
@@ -36,7 +47,7 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ server }) => {
       const res = await window.mcServerAPI.createBackup(server.id, snapshotName || 'manual');
       setStatusMsg(`[SUCCESS] Snapshot created: ${res.fileName}`);
       setSnapshotName('');
-      loadBackups();
+      refreshBackups();
     } catch (e: any) {
       setStatusMsg(`[ERROR] Failed creating backup: ${e.message}`);
     } finally {
@@ -70,7 +81,7 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ server }) => {
     if (!server) return;
     if (confirm(`CONFIRM: Delete backup archive "${fileName}"?`)) {
       await window.mcServerAPI.deleteBackup(server.id, fileName);
-      loadBackups();
+      refreshBackups();
     }
   };
 
@@ -138,7 +149,7 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ server }) => {
           <span>&gt; AVAILABLE WORLD SNAPSHOT ARCHIVES</span>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <span className="text-muted">TOTAL: {backups.length}</span>
-            <button className="cli-btn cli-btn-muted" style={{ padding: '2px 6px', fontSize: '10px' }} onClick={loadBackups}>
+            <button className="cli-btn cli-btn-muted" style={{ padding: '2px 6px', fontSize: '10px' }} onClick={refreshBackups}>
               <RefreshCw size={10} /> [ REFRESH ]
             </button>
           </div>

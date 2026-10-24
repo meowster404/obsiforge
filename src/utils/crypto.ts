@@ -120,7 +120,7 @@ export async function decryptSecret(encryptedPayload: string, masterKeyString: s
     );
 
     return new TextDecoder().decode(decryptedBuffer);
-  } catch (err) {
+  } catch {
     throw new Error('Failed to decrypt secret: invalid master key or corrupted ciphertext');
   }
 }

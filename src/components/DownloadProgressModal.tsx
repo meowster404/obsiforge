@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Download, CheckCircle, AlertTriangle, Cpu, X } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Cpu, X } from 'lucide-react';
 
 export interface DownloadProgressState {
   isOpen: boolean;

@@ -192,7 +192,7 @@ class NeonAuthService {
           localStorage.removeItem(STORAGE_KEYS.FAILED_ATTEMPTS);
         }
       }
-    } catch (e) {}
+    } catch {}
     return { locked: false };
   }
 
@@ -203,7 +203,7 @@ class NeonAuthService {
       data.count += 1;
       data.lastFailed = Date.now();
       localStorage.setItem(STORAGE_KEYS.FAILED_ATTEMPTS, JSON.stringify(data));
-    } catch (e) {}
+    } catch {}
   }
 
   private clearFailedAttempts() {
@@ -335,7 +335,7 @@ class NeonAuthService {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.AUTH_SESSION);
       return raw ? JSON.parse(raw) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -491,18 +491,18 @@ class NeonAuthService {
           if (rows && rows.length > 0) {
             encrypted = rows[0].encrypted_payload;
           }
-        } catch (e) {}
+        } catch {}
       }
 
       if (!encrypted) return null;
       try {
         const decryptedJson = await decryptSecret(encrypted, key);
         return JSON.parse(decryptedJson);
-      } catch (e) {
+      } catch {
         // Mismatched session key or legacy ciphertext; fallback cleanly
         return null;
       }
-    } catch (err) {
+    } catch {
       return null;
     }
   }
@@ -546,7 +546,7 @@ class NeonAuthService {
         return JSON.parse(rows[0].encrypted_payload);
       }
       return null;
-    } catch (e) {
+    } catch {
       return null;
     }
   }

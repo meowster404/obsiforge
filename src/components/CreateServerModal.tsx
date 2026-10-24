@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ServerConfig } from '../types/electron';
-import { Plus, X, Download, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react';
+import { X, Download } from 'lucide-react';
 import { ENDPOINTS } from '../config/endpoints';
 
 interface CreateServerModalProps {

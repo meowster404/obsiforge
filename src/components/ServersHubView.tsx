@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ServerConfig } from '../types/electron';
 import { OciGuiConfig, cleanMinecraftAddress } from '../services/neonAuth';
-import { Plus, Play, Square, Terminal, Server, Trash2, Cpu, HardDrive, Shield, Globe, Copy, Check } from 'lucide-react';
+import { Plus, Play, Square, Terminal, Server, Trash2, Globe, Copy, Check } from 'lucide-react';
 import { MINI_ASCII_BANNER } from '../utils/ascii';
 
 interface ServersHubViewProps {

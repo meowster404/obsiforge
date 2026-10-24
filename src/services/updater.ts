@@ -10,7 +10,7 @@ export interface UpdateInfo {
   checkedAt: number;
 }
 
-export const APP_CURRENT_VERSION = '1.0.0b';
+export const APP_CURRENT_VERSION = '1.0.1b';
 
 export class GitHubUpdaterService {
   private repo: string;

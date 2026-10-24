@@ -1,7 +1,7 @@
 import React from 'react';
 import { ServerConfig, SystemInfo } from '../types/electron';
 import { ObsiUser, OciGuiConfig, cleanMinecraftAddress } from '../services/neonAuth';
-import { Play, Square, RotateCw, Skull, Plus, Folder, Terminal, Shield, Key, Server, ChevronLeft, Cloud, Copy, Check, Globe } from 'lucide-react';
+import { Play, Square, RotateCw, Skull, Plus, Folder, Shield, Key, ChevronLeft, Cloud, Copy, Check } from 'lucide-react';
 
 interface HeaderProps {
   servers: ServerConfig[];
@@ -26,7 +26,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   servers,
   currentServer,
-  systemInfo,
+  systemInfo: _systemInfo,
   currentUser,
   ociConfig,
   isManagingServer,
@@ -97,7 +97,7 @@ export const Header: React.FC<HeaderProps> = ({
             OBSIFORGE
           </span>
           <span className="status-badge" style={{ fontSize: '10px', padding: '1px 5px', color: 'var(--secondary)', borderColor: 'var(--secondary)' }}>
-            v1.0.0b [BETA]
+            v1.0.1b [BETA]
           </span>
           <span className="text-muted" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             | <Cloud size={11} color="var(--primary)" /> OCI VM: <strong className="text-primary">{getTierLabel()}</strong>

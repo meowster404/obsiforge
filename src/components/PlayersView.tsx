@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ServerConfig, PlayersData } from '../types/electron';
 import { Users, Shield, UserX, AlertTriangle, UserCheck, ShieldAlert, Plus, Trash2, Ban } from 'lucide-react';
 
@@ -25,7 +25,7 @@ export const PlayersView: React.FC<PlayersViewProps> = ({ server, currentUser, o
   const [inputName, setInputName] = useState('');
   const [banReason, setBanReason] = useState('Violating server rules');
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!server) return;
     try {
       const data = await window.mcServerAPI.getPlayersData(server.id);
@@ -33,10 +33,19 @@ export const PlayersView: React.FC<PlayersViewProps> = ({ server, currentUser, o
     } catch (e) {
       console.error('Failed reading players data:', e);
     }
-  };
+  }, [server]);
 
   useEffect(() => {
-    loadData();
+    if (!server) return;
+    let isCancelled = false;
+    window.mcServerAPI.getPlayersData(server.id)
+      .then(data => {
+        if (!isCancelled) setPlayersData(data);
+      })
+      .catch(e => {
+        console.error('Failed reading players data:', e);
+      });
+
     if (window.mcServerAPI) {
       const unsub = window.mcServerAPI.onServerLog((logData) => {
         const line = logData.line;
@@ -57,29 +66,32 @@ export const PlayersView: React.FC<PlayersViewProps> = ({ server, currentUser, o
           setOnlinePlayers(prev => prev.filter(p => p.name.toLowerCase() !== pName.toLowerCase()));
         }
       });
-      return () => unsub();
+      return () => {
+        isCancelled = true;
+        unsub();
+      };
     }
+    return () => {
+      isCancelled = true;
+    };
   }, [server]);
 
   // Actions
   const handleOpPlayer = async (name: string) => {
     if (!server) return;
     await window.mcServerAPI.executePlayerAction(server.id, 'op', { name });
-    onSendCommand(`op ${name}`);
     setTimeout(loadData, 1000);
   };
 
   const handleDeopPlayer = async (name: string) => {
     if (!server) return;
     await window.mcServerAPI.executePlayerAction(server.id, 'deop', { name });
-    onSendCommand(`deop ${name}`);
     setTimeout(loadData, 1000);
   };
 
   const handleWhitelistAdd = async (name: string) => {
     if (!server || !name) return;
     await window.mcServerAPI.executePlayerAction(server.id, 'whitelist_add', { name });
-    onSendCommand(`whitelist add ${name}`);
     setInputName('');
     setTimeout(loadData, 1000);
   };
@@ -87,7 +99,6 @@ export const PlayersView: React.FC<PlayersViewProps> = ({ server, currentUser, o
   const handleWhitelistRemove = async (name: string) => {
     if (!server) return;
     await window.mcServerAPI.executePlayerAction(server.id, 'whitelist_remove', { name });
-    onSendCommand(`whitelist remove ${name}`);
     setTimeout(loadData, 1000);
   };
 

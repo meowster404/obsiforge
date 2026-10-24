@@ -1,6 +1,6 @@
 # ObsiForge // Cyber-Industrial Minecraft Engine Core
 
-![ObsiForge Version](https://img.shields.io/badge/version-1.0.0b--beta-00e5ff?style=for-the-badge&logo=electron)
+![ObsiForge Version](https://img.shields.io/badge/version-1.0.1b--beta-00e5ff?style=for-the-badge&logo=electron)
 ![Build](https://img.shields.io/badge/build-passing-33ff00?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-ffb000?style=for-the-badge)
 
@@ -21,7 +21,7 @@
 
 ## 📦 Current Version
 
-- **Current Build**: `1.0.0b` (Public Beta)
+- **Current Build**: `1.0.1b` (Public Beta)
 - **Next Release**: `1.0.0` (Official Production Launch)
 
 ---
@@ -69,7 +69,7 @@ The output `.exe` installer will be located in the `release/` directory.
 
 ## 🔄 Automated CI/CD (GitHub Actions)
 
-When a version tag is pushed (e.g. `v1.0.0b`), GitHub Actions will automatically:
+When a version tag is pushed (e.g. `v1.0.1b`), GitHub Actions will automatically:
 1. Compile the production bundles.
 2. Package the Windows `.exe` installer using `electron-builder`.
 3. Create a GitHub Release under `meowster404/obsiforge` tagged as Pre-release for beta builds.

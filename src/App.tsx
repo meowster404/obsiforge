@@ -17,6 +17,7 @@ import { ServersHubView } from './components/ServersHubView';
 import { CloudServerDirModal } from './components/CloudServerDirModal';
 import { DownloadProgressModal, DownloadProgressState } from './components/DownloadProgressModal';
 import { UpdateModal } from './components/UpdateModal';
+import { OciApiKeyRequiredModal } from './components/OciApiKeyRequiredModal';
 import { gitHubUpdater, UpdateInfo } from './services/updater';
 import { neonAuth, ObsiUser, OciGuiConfig } from './services/neonAuth';
 
@@ -31,9 +32,9 @@ export const App: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isCloudDirModalOpen, setIsCloudDirModalOpen] = useState(false);
+  const [isOciKeyRequiredModalOpen, setIsOciKeyRequiredModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<ObsiUser | null>(neonAuth.getCurrentUser());
   const [ociConfig, setOciConfig] = useState<OciGuiConfig | null>(null);
-  const [isOciRequired, setIsOciRequired] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [downloadState, setDownloadState] = useState<DownloadProgressState>({
@@ -46,7 +47,12 @@ export const App: React.FC = () => {
 
   // Initial Load
   useEffect(() => {
-    loadServers();
+    if (window.mcServerAPI) {
+      window.mcServerAPI.getServers().then(list => {
+        setServers(list);
+        neonAuth.syncServersToCloud(list).catch(() => {});
+      }).catch(e => console.error('Error fetching servers:', e));
+    }
 
     // Auto check for software updates from GitHub Releases on application boot
     gitHubUpdater.checkForUpdates().then(info => {
@@ -54,11 +60,8 @@ export const App: React.FC = () => {
     });
 
     neonAuth.loadOciConfig().then(cfg => {
-      if (cfg && cfg.instanceIp && cfg.tenancyOcid) {
+      if (cfg) {
         setOciConfig(cfg);
-        setIsOciRequired(false);
-      } else if (currentUser) {
-        setIsOciRequired(true);
       }
     });
 
@@ -123,18 +126,6 @@ export const App: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  const loadServers = async () => {
-    if (!window.mcServerAPI) return;
-    try {
-      const list = await window.mcServerAPI.getServers();
-      setServers(list);
-      // Background sync server registry with Neon Cloud DB
-      neonAuth.syncServersToCloud(list).catch(() => {});
-    } catch (e) {
-      console.error('Error fetching servers:', e);
-    }
-  };
 
   // Actions
   const handleStartServer = async () => {
@@ -213,19 +204,29 @@ export const App: React.FC = () => {
   };
 
   const handleOpenFolder = () => {
+    /*
+     * ============================================================================
+     * [TESTING HOOK] ORACLE CLOUD API KEY REQUIREMENT SCREEN
+     * To enforce API key insertion before using this Oracle Cloud function,
+     * uncomment the block below. Currently commented out for testing.
+     * ============================================================================
+     * if (!ociConfig || !ociConfig.instanceIp || !ociConfig.privateKeyPem) {
+     *   setIsOciKeyRequiredModalOpen(true);
+     *   return;
+     * }
+     */
+
     setIsCloudDirModalOpen(true);
   };
 
-  // If user is not authenticated or lacks mandatory Oracle Cloud keys, render full-screen AuthGate
-  if (!currentUser || isOciRequired) {
+  // If user is not authenticated, render full-screen AuthGate
+  if (!currentUser) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: '#0a0a0a' }}>
         <div className="crt-overlay" />
         <AuthGate
-          initialMode={isOciRequired ? 'oci_onboarding' : undefined}
           onAuthenticated={(user) => {
             setCurrentUser(user);
-            setIsOciRequired(false);
             neonAuth.loadOciConfig().then(cfg => { if (cfg) setOciConfig(cfg); });
           }}
         />
@@ -371,6 +372,22 @@ export const App: React.FC = () => {
         onClose={() => setIsCloudDirModalOpen(false)}
         server={currentServer}
         ociConfig={ociConfig}
+      />
+
+      {/*
+       * ============================================================================
+       * [TESTING HOOK] ORACLE CLOUD API KEY REQUIRED MODAL
+       * Triggered when testing or enforcing mandatory OCI API key check before cloud usage.
+       * ============================================================================
+       */}
+      <OciApiKeyRequiredModal
+        isOpen={isOciKeyRequiredModalOpen}
+        onClose={() => setIsOciKeyRequiredModalOpen(false)}
+        onConfigureKeys={() => {
+          setIsManagingServer(true);
+          setActiveTab('cloud');
+        }}
+        functionName="Oracle Cloud Remote Directory Explorer & 24/7 Engine"
       />
 
       {/* Engine Jar Download Progress Modal */}

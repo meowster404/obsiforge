@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ServerConfig, AddonItem } from '../types/electron';
-import { Package, Search, Download, Trash2, Power, AlertTriangle, CheckCircle, ExternalLink, RefreshCw, Star, Layers, Check } from 'lucide-react';
+import { Package, Search, Download, Trash2, Power, AlertTriangle, CheckCircle, ExternalLink, RefreshCw, Star } from 'lucide-react';
 import axios from 'axios';
 
 interface AddonsViewProps {
@@ -72,11 +72,6 @@ export const AddonsView: React.FC<AddonsViewProps> = ({ server }) => {
       console.error('Failed to list addons:', e);
     }
   };
-
-  useEffect(() => {
-    loadInstalledAddons();
-    handleSearch();
-  }, [server]);
 
   const handleToggleAddon = async (item: AddonItem) => {
     if (!server) return;
@@ -161,13 +156,85 @@ export const AddonsView: React.FC<AddonsViewProps> = ({ server }) => {
           params: { query: searchQuery.trim() || 'optimization', limit: 20 }
         });
         setSearchResults(fallbackRes.data.hits);
-      } catch (e) {
+      } catch {
         setInstallStatusMsg('ERROR: Could not contact Modrinth API.');
       }
     } finally {
       setSearching(false);
     }
   };
+
+  useEffect(() => {
+    if (!server) return;
+    let isCancelled = false;
+    window.mcServerAPI.listAddons(server.id)
+      .then(list => {
+        if (!isCancelled) setInstalledAddons(list);
+      })
+      .catch(e => {
+        console.error('Failed to list addons:', e);
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [server]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchCatalog = async () => {
+      try {
+        const facets: string[][] = [];
+        if (contentType !== 'all') {
+          facets.push([`project_type:${contentType}`]);
+        }
+        if (server && ['mod', 'plugin', 'all'].includes(contentType)) {
+          if (['paper', 'purpur', 'spigot'].includes(server.engine)) {
+            facets.push(['categories:paper', 'categories:spigot', 'categories:purpur']);
+          } else if (server.engine === 'fabric') {
+            facets.push(['categories:fabric', 'categories:quilt']);
+          } else if (server.engine === 'forge') {
+            facets.push(['categories:forge']);
+          } else if (server.engine === 'neoforge') {
+            facets.push(['categories:neoforge']);
+          }
+        }
+        const params: any = {
+          query: searchQuery.trim(),
+          index: sortBy,
+          limit: 24
+        };
+        if (facets.length > 0) params.facets = JSON.stringify(facets);
+        const res = await axios.get('https://api.modrinth.com/v2/search', {
+          params,
+          headers: { 'User-Agent': 'ObsiForge-Minecraft-Engine/1.0' }
+        });
+        if (!isCancelled) {
+          const hits: ModrinthHit[] = res.data.hits.map((h: any) => ({
+            project_id: h.project_id,
+            slug: h.slug,
+            title: h.title,
+            description: h.description,
+            icon_url: h.icon_url,
+            downloads: h.downloads || 0,
+            follows: h.follows || 0,
+            author: h.author || 'Author',
+            project_type: h.project_type,
+            categories: h.categories || [],
+            versions: h.versions || [],
+            latest_version: h.latest_version || 'Latest',
+            date_modified: h.date_modified
+          }));
+          setSearchResults(hits);
+        }
+      } catch (err) {
+        console.error('Initial catalog fetch failed:', err);
+      }
+    };
+    fetchCatalog();
+    return () => {
+      isCancelled = true;
+    };
+  }, [server, contentType, searchQuery, sortBy]);
 
   // 1-Click Install with Version & Dependency Resolution
   const handleInstallClick = async (project: ModrinthHit) => {
@@ -237,7 +304,7 @@ export const AddonsView: React.FC<AddonsViewProps> = ({ server }) => {
                   downloadUrl: depDownloadUrl
                 });
               }
-            } catch (depErr) {}
+            } catch {}
           }
         }
       }
@@ -328,7 +395,7 @@ export const AddonsView: React.FC<AddonsViewProps> = ({ server }) => {
               });
             }
           }
-        } catch (e) {}
+        } catch {}
       }
     }
 
@@ -350,7 +417,7 @@ export const AddonsView: React.FC<AddonsViewProps> = ({ server }) => {
           const hit = searchRes.data.hits[0];
           await handleInstallClick(hit);
         }
-      } catch (e) {}
+      } catch {}
     }
   };
 

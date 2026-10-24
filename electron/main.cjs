@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, spawnSync } = require('child_process');
 const os = require('os');
 const axios = require('axios');
 const AdmZip = require('adm-zip');
@@ -26,6 +26,33 @@ if (!fs.existsSync(CONFIG_FILE)) {
 const activeSessions = new Map();
 let playitProcess = null;
 
+// =========================================================================
+// SECURITY & INPUT SANITIZATION HELPERS
+// =========================================================================
+
+function sanitizeId(id) {
+  if (typeof id !== 'string') throw new Error('Invalid identifier type');
+  const clean = id.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!clean || clean !== id) {
+    throw new Error('Access denied: Malicious or illegal identifier');
+  }
+  return clean;
+}
+
+function resolveSafePath(baseDir, ...userSegments) {
+  const resolvedBase = path.resolve(baseDir);
+  const resolvedTarget = path.resolve(baseDir, ...userSegments);
+  if (!resolvedTarget.startsWith(resolvedBase + path.sep) && resolvedTarget !== resolvedBase) {
+    throw new Error('Access denied: Path traversal attempt detected');
+  }
+  return resolvedTarget;
+}
+
+function sanitizeStdinCommand(input) {
+  if (typeof input !== 'string') return '';
+  return input.replace(/[\r\n]+/g, ' ').trim();
+}
+
 function loadServersConfig() {
   try {
     const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
@@ -49,7 +76,8 @@ function scanJavaRuntimes() {
     checkedPaths.add(binPath);
     try {
       if (fs.existsSync(binPath)) {
-        const out = execSync(`"${binPath}" -version 2>&1`, { encoding: 'utf-8', timeout: 3000 });
+        const res = spawnSync(binPath, ['-version'], { encoding: 'utf-8', timeout: 3000 });
+        const out = (res.stdout || '') + (res.stderr || '');
         const versionMatch = out.match(/(?:version|openjdk version)\s+"?([0-9._]+)/i);
         const versionStr = versionMatch ? versionMatch[1] : 'Unknown';
         let major = 8;
@@ -65,7 +93,7 @@ function scanJavaRuntimes() {
           label: label || `Java ${major} (${versionStr})`
         });
       }
-    } catch (e) {
+    } catch {
       // Ignored
     }
   }
@@ -77,7 +105,7 @@ function scanJavaRuntimes() {
       .map(s => s.trim())
       .filter(Boolean);
     sysJava.forEach(p => testJava(p, 'System PATH Java'));
-  } catch (e) {}
+  } catch {}
 
   // Check standard Program Files locations on Windows
   const searchDirs = [
@@ -98,7 +126,7 @@ function scanJavaRuntimes() {
           const candidate = path.join(sDir, sub, 'bin', 'java.exe');
           testJava(candidate, `${sub}`);
         }
-      } catch (e) {}
+      } catch {}
     }
   }
 
@@ -334,7 +362,7 @@ async function downloadEngineJar(serverDir, jarName, engine, mcVersion) {
       try {
         const manifestRes = await axios.get(mojangManifestUrl);
         resolvedVersion = manifestRes.data?.latest?.release || '26.3';
-      } catch (e) {
+      } catch {
         resolvedVersion = '26.3';
       }
     }
@@ -348,7 +376,7 @@ async function downloadEngineJar(serverDir, jarName, engine, mcVersion) {
         if (!projRes.data.versions.includes(paperVersion)) {
           paperVersion = projRes.data.versions[projRes.data.versions.length - 1];
         }
-      } catch (e) {}
+      } catch {}
       const buildsRes = await axios.get(`${paperApiUrl}/versions/${paperVersion}`);
       const latestBuild = buildsRes.data.builds[buildsRes.data.builds.length - 1];
       downloadUrl = `${paperApiUrl}/versions/${paperVersion}/builds/${latestBuild}/downloads/paper-${paperVersion}-${latestBuild}.jar`;
@@ -449,8 +477,9 @@ async function downloadEngineJar(serverDir, jarName, engine, mcVersion) {
 }
 
 ipcMain.handle('servers:update', async (_e, serverId, data) => {
+  const safeId = sanitizeId(serverId);
   const cfg = loadServersConfig();
-  const idx = cfg.servers.findIndex(s => s.id === serverId);
+  const idx = cfg.servers.findIndex(s => s.id === safeId);
   if (idx !== -1) {
     cfg.servers[idx] = { ...cfg.servers[idx], ...data };
     saveServersConfig(cfg);
@@ -461,27 +490,28 @@ ipcMain.handle('servers:update', async (_e, serverId, data) => {
 
 ipcMain.handle('servers:delete', async (_e, serverId) => {
   try {
+    const safeId = sanitizeId(serverId);
     // 1. Force kill active process if running
-    const session = activeSessions.get(serverId);
+    const session = activeSessions.get(safeId);
     if (session && session.process) {
-      try { session.process.kill('SIGKILL'); } catch (e) {}
-      activeSessions.delete(serverId);
+      try { session.process.kill('SIGKILL'); } catch {}
+      activeSessions.delete(safeId);
     }
 
     // 2. Remove from servers config immediately
     const cfg = loadServersConfig();
-    cfg.servers = cfg.servers.filter(s => s.id !== serverId);
+    cfg.servers = cfg.servers.filter(s => s.id !== safeId);
     saveServersConfig(cfg);
 
     // 3. Clean directory safely with error handling and retry so OS locks never break deletion
-    const serverDir = path.join(SERVERS_DIR, serverId);
+    const serverDir = resolveSafePath(SERVERS_DIR, safeId);
     if (fs.existsSync(serverDir)) {
       try {
         fs.rmSync(serverDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
       } catch (err) {
         console.warn(`Could not completely clean serverDir ${serverDir} immediately (file locked by Windows):`, err.message);
         setTimeout(() => {
-          try { fs.rmSync(serverDir, { recursive: true, force: true }); } catch (_) {}
+          try { fs.rmSync(serverDir, { recursive: true, force: true }); } catch {}
         }, 2000);
       }
     }
@@ -525,24 +555,35 @@ function buildJvmArgs(server) {
     );
   }
 
-  args.push('-jar', server.jarFile || 'server.jar', 'nogui');
+  args.push('-jar', path.basename(server.jarFile || 'server.jar'), 'nogui');
   return args;
 }
 
-ipcMain.handle('server:start', async (_e, serverId) => {
+function sendLog(serverId, line) {
+  const payload = { serverId, line, timestamp: Date.now() };
+  mainWindow?.webContents.send('server:log', payload);
+}
+
+function notifyStatus(serverId, status) {
+  mainWindow?.webContents.send('server:status-changed', { serverId, status });
+}
+
+async function startServerProcess(serverId) {
+  const safeId = sanitizeId(serverId);
   const cfg = loadServersConfig();
-  const server = cfg.servers.find(s => s.id === serverId);
+  const server = cfg.servers.find(s => s.id === safeId);
   if (!server) throw new Error('Server not found');
 
-  if (activeSessions.has(serverId) && activeSessions.get(serverId).status === 'running') {
+  if (activeSessions.has(safeId) && activeSessions.get(safeId).status === 'running') {
     return { success: false, message: 'Server is already running' };
   }
 
-  const serverDir = path.join(SERVERS_DIR, serverId);
-  const jarPath = path.join(serverDir, server.jarFile || 'server.jar');
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const safeJarName = path.basename(server.jarFile || 'server.jar');
+  const jarPath = resolveSafePath(serverDir, safeJarName);
 
   if (!fs.existsSync(jarPath)) {
-    return { success: false, message: `Server JAR "${server.jarFile || 'server.jar'}" not found. Please wait for download or place jar file.` };
+    return { success: false, message: `Server JAR "${safeJarName}" not found. Please wait for download or place jar file.` };
   }
 
   // Ensure EULA is accepted
@@ -556,10 +597,10 @@ ipcMain.handle('server:start', async (_e, serverId) => {
     process: null,
     logs: [],
     statsTimer: null,
-    watchdogRetries: 0
+    watchdogRetries: (activeSessions.get(safeId)?.watchdogRetries) || 0
   };
-  activeSessions.set(serverId, session);
-  notifyStatus(serverId, 'starting');
+  activeSessions.set(safeId, session);
+  notifyStatus(safeId, 'starting');
 
   try {
     const child = spawn(javaExec, jvmArgs, {
@@ -571,16 +612,16 @@ ipcMain.handle('server:start', async (_e, serverId) => {
 
     // Push initial status log
     const startMsg = `[SYSTEM] Spawning Minecraft Server Process [PID: ${child.pid}] with ${jvmArgs.slice(0, 2).join(' ')}...`;
-    sendLog(serverId, startMsg);
+    sendLog(safeId, startMsg);
 
     child.stdout.on('data', (data) => {
       const text = data.toString('utf-8');
       const lines = text.split(/\r?\n/).filter(Boolean);
       lines.forEach(line => {
-        sendLog(serverId, line);
+        sendLog(safeId, line);
         if (line.includes('Done (') && line.includes(')! For help, type "help"')) {
           session.status = 'running';
-          notifyStatus(serverId, 'running');
+          notifyStatus(safeId, 'running');
         }
       });
     });
@@ -589,31 +630,33 @@ ipcMain.handle('server:start', async (_e, serverId) => {
       const text = data.toString('utf-8');
       const lines = text.split(/\r?\n/).filter(Boolean);
       lines.forEach(line => {
-        sendLog(serverId, `[STDERR] ${line}`);
+        sendLog(safeId, `[STDERR] ${line}`);
       });
     });
 
     child.on('close', (code) => {
-      sendLog(serverId, `[SYSTEM] Server process exited with code ${code}.`);
+      sendLog(safeId, `[SYSTEM] Server process exited with code ${code}.`);
       if (session.statsTimer) clearInterval(session.statsTimer);
       session.status = 'stopped';
       session.process = null;
-      notifyStatus(serverId, 'stopped');
+      notifyStatus(safeId, 'stopped');
 
       // Watchdog Auto-Restart check
       if (code !== 0 && server.autoRestart && session.watchdogRetries < 3) {
         session.watchdogRetries++;
-        sendLog(serverId, `[WATCHDOG] Abnormal crash detected! Automatic restart scheduled in 5 seconds (Attempt ${session.watchdogRetries}/3)...`);
+        sendLog(safeId, `[WATCHDOG] Abnormal crash detected! Automatic restart scheduled in 5 seconds (Attempt ${session.watchdogRetries}/3)...`);
         setTimeout(() => {
-          ipcMain.emit('server:start', null, serverId);
+          startServerProcess(safeId).catch(err => {
+            sendLog(safeId, `[WATCHDOG ERROR] Auto-restart failed: ${err.message}`);
+          });
         }, 5000);
       }
     });
 
     child.on('error', (err) => {
-      sendLog(serverId, `[SYSTEM ERROR] Failed to start server process: ${err.message}`);
+      sendLog(safeId, `[SYSTEM ERROR] Failed to start server process: ${err.message}`);
       session.status = 'stopped';
-      notifyStatus(serverId, 'stopped');
+      notifyStatus(safeId, 'stopped');
     });
 
     // Start resource monitoring timer
@@ -622,12 +665,12 @@ ipcMain.handle('server:start', async (_e, serverId) => {
         try {
           const stats = await pidusage(child.pid);
           mainWindow?.webContents.send('server:resource-stats', {
-            serverId,
+            serverId: safeId,
             cpu: Math.min(100, Math.round(stats.cpu)),
             memoryMb: Math.round(stats.memory / (1024 * 1024)),
             uptime: Math.round(stats.elapsed / 1000)
           });
-        } catch (e) {
+        } catch {
           // Process might have terminated
         }
       }
@@ -636,83 +679,87 @@ ipcMain.handle('server:start', async (_e, serverId) => {
     return { success: true, pid: child.pid };
   } catch (err) {
     session.status = 'stopped';
-    notifyStatus(serverId, 'stopped');
+    notifyStatus(safeId, 'stopped');
     return { success: false, message: err.message };
   }
-});
-
-function sendLog(serverId, line) {
-  const payload = { serverId, line, timestamp: Date.now() };
-  mainWindow?.webContents.send('server:log', payload);
 }
 
-function notifyStatus(serverId, status) {
-  mainWindow?.webContents.send('server:status-changed', { serverId, status });
-}
-
-ipcMain.handle('server:stop', async (_e, serverId) => {
-  const session = activeSessions.get(serverId);
+async function stopServerProcess(serverId) {
+  const safeId = sanitizeId(serverId);
+  const session = activeSessions.get(safeId);
   if (!session || !session.process) {
     return { success: true, message: 'Server is already stopped' };
   }
 
   session.status = 'stopping';
-  notifyStatus(serverId, 'stopping');
-  sendLog(serverId, '[SYSTEM] Sending /stop command to Minecraft server...');
+  notifyStatus(safeId, 'stopping');
+  sendLog(safeId, '[SYSTEM] Sending /stop command to Minecraft server...');
 
   try {
     session.process.stdin.write('stop\n');
-  } catch (e) {}
+  } catch {}
 
   // Force kill fallback if not closed within 12 seconds
   setTimeout(() => {
     if (session.process && session.status === 'stopping') {
-      sendLog(serverId, '[WATCHDOG] Graceful shutdown timeout reached. Terminating process...');
+      sendLog(safeId, '[WATCHDOG] Graceful shutdown timeout reached. Terminating process...');
       try {
         session.process.kill('SIGKILL');
-      } catch (e) {}
+      } catch {}
     }
   }, 12000);
 
   return { success: true };
+}
+
+ipcMain.handle('server:start', async (_e, serverId) => {
+  return await startServerProcess(serverId);
+});
+
+ipcMain.handle('server:stop', async (_e, serverId) => {
+  return await stopServerProcess(serverId);
 });
 
 ipcMain.handle('server:restart', async (_e, serverId) => {
-  await ipcMain.handle('server:stop', null, serverId);
+  await stopServerProcess(serverId);
   setTimeout(async () => {
-    await ipcMain.handle('server:start', null, serverId);
+    await startServerProcess(serverId);
   }, 4000);
   return { success: true };
 });
 
 ipcMain.handle('server:kill', async (_e, serverId) => {
-  const session = activeSessions.get(serverId);
+  const safeId = sanitizeId(serverId);
+  const session = activeSessions.get(safeId);
   if (session && session.process) {
     try {
       session.process.kill('SIGKILL');
       session.status = 'stopped';
-      notifyStatus(serverId, 'stopped');
-      sendLog(serverId, '[SYSTEM] Process terminated with SIGKILL.');
-    } catch (e) {}
+      notifyStatus(safeId, 'stopped');
+      sendLog(safeId, '[SYSTEM] Process terminated with SIGKILL.');
+    } catch {}
   }
   return { success: true };
 });
 
 ipcMain.handle('server:send-command', async (_e, serverId, command) => {
-  const session = activeSessions.get(serverId);
+  const safeId = sanitizeId(serverId);
+  const session = activeSessions.get(safeId);
   if (!session || !session.process || session.status !== 'running') {
     return { success: false, message: 'Server is not running' };
   }
-  const cleanCmd = command.startsWith('/') ? command.slice(1) : command;
+  const cleanCmd = sanitizeStdinCommand(command.startsWith('/') ? command.slice(1) : command);
+  if (!cleanCmd) return { success: false, message: 'Command is empty' };
   session.process.stdin.write(cleanCmd + '\n');
-  sendLog(serverId, `> ${cleanCmd}`);
+  sendLog(safeId, `> ${cleanCmd}`);
   return { success: true };
 });
 
 ipcMain.handle('server:get-status', async (_e, serverId) => {
-  const session = activeSessions.get(serverId);
+  const safeId = sanitizeId(serverId);
+  const session = activeSessions.get(safeId);
   return {
-    serverId,
+    serverId: safeId,
     status: session ? session.status : 'stopped',
     pid: session && session.process ? session.process.pid : null
   };
@@ -723,7 +770,9 @@ ipcMain.handle('server:get-status', async (_e, serverId) => {
 // =========================================================================
 
 ipcMain.handle('server:get-properties', async (_e, serverId) => {
-  const propFile = path.join(SERVERS_DIR, serverId, 'server.properties');
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const propFile = resolveSafePath(serverDir, 'server.properties');
   if (!fs.existsSync(propFile)) return {};
   const content = fs.readFileSync(propFile, 'utf-8');
   const props = {};
@@ -742,13 +791,19 @@ ipcMain.handle('server:get-properties', async (_e, serverId) => {
 });
 
 ipcMain.handle('server:save-properties', async (_e, serverId, newProps) => {
-  const propFile = path.join(SERVERS_DIR, serverId, 'server.properties');
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const propFile = resolveSafePath(serverDir, 'server.properties');
   const lines = [
     '# Minecraft server properties - Saved by Terminal CLI GUI',
     `# Updated: ${new Date().toISOString()}`
   ];
-  for (const [key, value] of Object.entries(newProps)) {
-    lines.push(`${key}=${value}`);
+  for (const [key, value] of Object.entries(newProps || {})) {
+    const safeKey = sanitizeStdinCommand(key);
+    const safeValue = sanitizeStdinCommand(String(value));
+    if (safeKey) {
+      lines.push(`${safeKey}=${safeValue}`);
+    }
   }
   fs.writeFileSync(propFile, lines.join('\n'), 'utf-8');
   return true;
@@ -756,8 +811,9 @@ ipcMain.handle('server:save-properties', async (_e, serverId, newProps) => {
 
 // World & Map Management
 ipcMain.handle('server:get-world-info', async (_e, serverId) => {
-  const serverDir = path.join(SERVERS_DIR, serverId);
-  const propFile = path.join(serverDir, 'server.properties');
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const propFile = resolveSafePath(serverDir, 'server.properties');
   let levelName = 'world';
   let levelSeed = '';
   let levelType = 'minecraft:normal';
@@ -777,7 +833,8 @@ ipcMain.handle('server:get-world-info', async (_e, serverId) => {
   let totalSizeBytes = 0;
 
   for (const candidate of Array.from(new Set(worldCandidates))) {
-    const wPath = path.join(serverDir, candidate);
+    const safeCandidate = path.basename(candidate);
+    const wPath = resolveSafePath(serverDir, safeCandidate);
     if (fs.existsSync(wPath) && fs.statSync(wPath).isDirectory()) {
       let dirSize = 0;
       try {
@@ -793,10 +850,10 @@ ipcMain.handle('server:get-world-info', async (_e, serverId) => {
           }
         }
         calcSize(wPath);
-      } catch (e) {}
+      } catch {}
       totalSizeBytes += dirSize;
       dimensions.push({
-        folderName: candidate,
+        folderName: safeCandidate,
         sizeMb: (dirSize / (1024 * 1024)).toFixed(2),
         hasLevelDat: fs.existsSync(path.join(wPath, 'level.dat')),
         hasRegion: fs.existsSync(path.join(wPath, 'region'))
@@ -814,8 +871,9 @@ ipcMain.handle('server:get-world-info', async (_e, serverId) => {
 });
 
 ipcMain.handle('server:reset-world', async (_e, serverId, newSeed) => {
-  const serverDir = path.join(SERVERS_DIR, serverId);
-  const propFile = path.join(serverDir, 'server.properties');
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const propFile = resolveSafePath(serverDir, 'server.properties');
   let levelName = 'world';
 
   if (fs.existsSync(propFile)) {
@@ -825,7 +883,7 @@ ipcMain.handle('server:reset-world', async (_e, serverId, newSeed) => {
 
     // If newSeed is empty or not provided, generate a random high-entropy seed
     const seedToUse = (newSeed && String(newSeed).trim() !== '') 
-      ? String(newSeed).trim() 
+      ? sanitizeStdinCommand(String(newSeed)) 
       : generateRandomSeed();
 
     if (raw.includes('level-seed=')) {
@@ -838,18 +896,22 @@ ipcMain.handle('server:reset-world', async (_e, serverId, newSeed) => {
 
   const worldCandidates = [levelName, `${levelName}_nether`, `${levelName}_the_end`, 'world', 'world_nether', 'world_the_end'];
   for (const candidate of Array.from(new Set(worldCandidates))) {
-    const wPath = path.join(serverDir, candidate);
+    const safeCandidate = path.basename(candidate);
+    const wPath = resolveSafePath(serverDir, safeCandidate);
     if (fs.existsSync(wPath)) {
       try {
         fs.rmSync(wPath, { recursive: true, force: true });
-      } catch (e) {}
+      } catch {}
     }
   }
   return { success: true };
 });
 
 ipcMain.handle('server:get-raw-file', async (_e, serverId, fileName) => {
-  const target = path.join(SERVERS_DIR, serverId, fileName);
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const safeFile = path.basename(fileName);
+  const target = resolveSafePath(serverDir, safeFile);
   if (fs.existsSync(target)) {
     return fs.readFileSync(target, 'utf-8');
   }
@@ -857,7 +919,10 @@ ipcMain.handle('server:get-raw-file', async (_e, serverId, fileName) => {
 });
 
 ipcMain.handle('server:save-raw-file', async (_e, serverId, fileName, content) => {
-  const target = path.join(SERVERS_DIR, serverId, fileName);
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const safeFile = path.basename(fileName);
+  const target = resolveSafePath(serverDir, safeFile);
   fs.writeFileSync(target, content, 'utf-8');
   return true;
 });
@@ -867,13 +932,15 @@ ipcMain.handle('server:save-raw-file', async (_e, serverId, fileName, content) =
 // =========================================================================
 
 ipcMain.handle('server:get-players-data', async (_e, serverId) => {
-  const serverDir = path.join(SERVERS_DIR, serverId);
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
   function readJson(file) {
-    const p = path.join(serverDir, file);
+    const safeFile = path.basename(file);
+    const p = resolveSafePath(serverDir, safeFile);
     if (!fs.existsSync(p)) return [];
     try {
       return JSON.parse(fs.readFileSync(p, 'utf-8'));
-    } catch (e) {
+    } catch {
       return [];
     }
   }
@@ -887,7 +954,8 @@ ipcMain.handle('server:get-players-data', async (_e, serverId) => {
 });
 
 ipcMain.handle('server:save-players-data', async (_e, serverId, type, data) => {
-  const serverDir = path.join(SERVERS_DIR, serverId);
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
   const fileMap = {
     ops: 'ops.json',
     whitelist: 'whitelist.json',
@@ -896,42 +964,50 @@ ipcMain.handle('server:save-players-data', async (_e, serverId, type, data) => {
   };
   const fileName = fileMap[type];
   if (fileName) {
-    fs.writeFileSync(path.join(serverDir, fileName), JSON.stringify(data, null, 2), 'utf-8');
+    const p = resolveSafePath(serverDir, fileName);
+    fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf-8');
     return true;
   }
   return false;
 });
 
 ipcMain.handle('server:player-action', async (_e, serverId, action, payload) => {
-  const session = activeSessions.get(serverId);
+  const safeId = sanitizeId(serverId);
+  const session = activeSessions.get(safeId);
   const isOnline = session && session.process && session.status === 'running';
+
+  const safeName = sanitizeStdinCommand(payload?.name || '');
+  const safeReason = sanitizeStdinCommand(payload?.reason || '');
+  const safeIp = sanitizeStdinCommand(payload?.ip || safeName);
+
+  if (!safeName && action !== 'ban_ip') return { success: false, message: 'Player name required' };
 
   // If server is online, execute via command line
   if (isOnline) {
     switch (action) {
       case 'op':
-        session.process.stdin.write(`op ${payload.name}\n`);
+        session.process.stdin.write(`op ${safeName}\n`);
         break;
       case 'deop':
-        session.process.stdin.write(`deop ${payload.name}\n`);
+        session.process.stdin.write(`deop ${safeName}\n`);
         break;
       case 'whitelist_add':
-        session.process.stdin.write(`whitelist add ${payload.name}\n`);
+        session.process.stdin.write(`whitelist add ${safeName}\n`);
         break;
       case 'whitelist_remove':
-        session.process.stdin.write(`whitelist remove ${payload.name}\n`);
+        session.process.stdin.write(`whitelist remove ${safeName}\n`);
         break;
       case 'kick':
-        session.process.stdin.write(`kick ${payload.name} ${payload.reason || 'Kicked by Terminal Console'}\n`);
+        session.process.stdin.write(`kick ${safeName} ${safeReason || 'Kicked by Terminal Console'}\n`);
         break;
       case 'ban':
-        session.process.stdin.write(`ban ${payload.name} ${payload.reason || 'Banned by Terminal Admin'}\n`);
+        session.process.stdin.write(`ban ${safeName} ${safeReason || 'Banned by Terminal Admin'}\n`);
         break;
       case 'pardon':
-        session.process.stdin.write(`pardon ${payload.name}\n`);
+        session.process.stdin.write(`pardon ${safeName}\n`);
         break;
       case 'ban_ip':
-        session.process.stdin.write(`ban-ip ${payload.ip || payload.name}\n`);
+        session.process.stdin.write(`ban-ip ${safeIp}\n`);
         break;
     }
   }
@@ -943,12 +1019,13 @@ ipcMain.handle('server:player-action', async (_e, serverId, action, payload) => 
 // =========================================================================
 
 ipcMain.handle('server:list-addons', async (_e, serverId) => {
-  const serverDir = path.join(SERVERS_DIR, serverId);
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
   const addons = [];
 
   const dirs = [
-    { type: 'mod', path: path.join(serverDir, 'mods') },
-    { type: 'plugin', path: path.join(serverDir, 'plugins') }
+    { type: 'mod', path: resolveSafePath(serverDir, 'mods') },
+    { type: 'plugin', path: resolveSafePath(serverDir, 'plugins') }
   ];
 
   for (const d of dirs) {
@@ -956,13 +1033,14 @@ ipcMain.handle('server:list-addons', async (_e, serverId) => {
       const files = fs.readdirSync(d.path);
       for (const f of files) {
         if (f.endsWith('.jar') || f.endsWith('.jar.disabled')) {
-          const fullPath = path.join(d.path, f);
+          const safeF = path.basename(f);
+          const fullPath = resolveSafePath(d.path, safeF);
           const stat = fs.statSync(fullPath);
           addons.push({
-            name: f.replace('.disabled', ''),
-            fileName: f,
+            name: safeF.replace('.disabled', ''),
+            fileName: safeF,
             type: d.type,
-            enabled: !f.endsWith('.disabled'),
+            enabled: !safeF.endsWith('.disabled'),
             sizeKb: Math.round(stat.size / 1024),
             modified: stat.mtimeMs
           });
@@ -975,17 +1053,19 @@ ipcMain.handle('server:list-addons', async (_e, serverId) => {
 });
 
 ipcMain.handle('server:toggle-addon', async (_e, serverId, fileName, enable) => {
-  const serverDir = path.join(SERVERS_DIR, serverId);
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const safeFileName = path.basename(fileName);
   const paths = [
-    path.join(serverDir, 'mods', fileName),
-    path.join(serverDir, 'plugins', fileName)
+    resolveSafePath(serverDir, 'mods', safeFileName),
+    resolveSafePath(serverDir, 'plugins', safeFileName)
   ];
 
   for (const src of paths) {
     if (fs.existsSync(src)) {
       let target;
       if (enable && src.endsWith('.disabled')) {
-        target = src.replace('.disabled', '');
+        target = src.replace(/\.disabled$/, '');
       } else if (!enable && !src.endsWith('.disabled')) {
         target = src + '.disabled';
       }
@@ -999,10 +1079,12 @@ ipcMain.handle('server:toggle-addon', async (_e, serverId, fileName, enable) => 
 });
 
 ipcMain.handle('server:delete-addon', async (_e, serverId, fileName) => {
-  const serverDir = path.join(SERVERS_DIR, serverId);
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const safeFileName = path.basename(fileName);
   const paths = [
-    path.join(serverDir, 'mods', fileName),
-    path.join(serverDir, 'plugins', fileName)
+    resolveSafePath(serverDir, 'mods', safeFileName),
+    resolveSafePath(serverDir, 'plugins', safeFileName)
   ];
   for (const p of paths) {
     if (fs.existsSync(p)) {
@@ -1014,14 +1096,17 @@ ipcMain.handle('server:delete-addon', async (_e, serverId, fileName) => {
 });
 
 ipcMain.handle('server:install-addon-url', async (_e, serverId, downloadUrl, fileName) => {
+  const safeId = sanitizeId(serverId);
   const cfg = loadServersConfig();
-  const server = cfg.servers.find(s => s.id === serverId);
+  const server = cfg.servers.find(s => s.id === safeId);
   const isPluginEngine = ['paper', 'purpur', 'spigot'].includes(server?.engine || '');
-  const targetDir = path.join(SERVERS_DIR, serverId, isPluginEngine ? 'plugins' : 'mods');
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const targetDir = resolveSafePath(serverDir, isPluginEngine ? 'plugins' : 'mods');
 
   if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-  const targetPath = path.join(targetDir, fileName);
+  const safeFileName = path.basename(fileName);
+  const targetPath = resolveSafePath(targetDir, safeFileName);
   const response = await axios({
     method: 'GET',
     url: downloadUrl,
@@ -1032,21 +1117,25 @@ ipcMain.handle('server:install-addon-url', async (_e, serverId, downloadUrl, fil
   response.data.pipe(writer);
 
   return new Promise((resolve, reject) => {
-    writer.on('finish', () => resolve({ success: true, fileName }));
+    writer.on('finish', () => resolve({ success: true, fileName: safeFileName }));
     writer.on('error', (err) => reject(err));
   });
 });
 
 ipcMain.handle('server:install-addon-file', async (_e, serverId, sourcePath) => {
+  const safeId = sanitizeId(serverId);
   const cfg = loadServersConfig();
-  const server = cfg.servers.find(s => s.id === serverId);
+  const server = cfg.servers.find(s => s.id === safeId);
   const isPluginEngine = ['paper', 'purpur', 'spigot'].includes(server?.engine || '');
-  const targetDir = path.join(SERVERS_DIR, serverId, isPluginEngine ? 'plugins' : 'mods');
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const targetDir = resolveSafePath(serverDir, isPluginEngine ? 'plugins' : 'mods');
 
-  const fileName = path.basename(sourcePath);
-  const dest = path.join(targetDir, fileName);
+  if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+  const safeFileName = path.basename(sourcePath);
+  const dest = resolveSafePath(targetDir, safeFileName);
   fs.copyFileSync(sourcePath, dest);
-  return { success: true, fileName };
+  return { success: true, fileName: safeFileName };
 });
 
 ipcMain.handle('server:inspect-jar', async (_e, jarFilePath) => {
@@ -1130,13 +1219,16 @@ ipcMain.handle('server:inspect-jar', async (_e, jarFilePath) => {
 // =========================================================================
 
 ipcMain.handle('server:list-backups', async (_e, serverId) => {
-  const backupDir = path.join(SERVERS_DIR, serverId, 'backups');
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const backupDir = resolveSafePath(serverDir, 'backups');
   if (!fs.existsSync(backupDir)) return [];
   const files = fs.readdirSync(backupDir).filter(f => f.endsWith('.zip'));
   return files.map(f => {
-    const stat = fs.statSync(path.join(backupDir, f));
+    const safeF = path.basename(f);
+    const stat = fs.statSync(resolveSafePath(backupDir, safeF));
     return {
-      fileName: f,
+      fileName: safeF,
       sizeMb: (stat.size / (1024 * 1024)).toFixed(2),
       createdAt: stat.birthtimeMs || stat.mtimeMs
     };
@@ -1144,20 +1236,21 @@ ipcMain.handle('server:list-backups', async (_e, serverId) => {
 });
 
 ipcMain.handle('server:create-backup', async (_e, serverId, name) => {
-  const serverDir = path.join(SERVERS_DIR, serverId);
-  const backupDir = path.join(serverDir, 'backups');
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const backupDir = resolveSafePath(serverDir, 'backups');
   if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const safeName = (name || 'snapshot').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const zipPath = path.join(backupDir, `backup_${safeName}_${timestamp}.zip`);
+  const zipPath = resolveSafePath(backupDir, `backup_${safeName}_${timestamp}.zip`);
 
   const zip = new AdmZip();
 
   // Add world folder(s)
   const worldFolders = ['world', 'world_nether', 'world_the_end'];
   worldFolders.forEach(wf => {
-    const full = path.join(serverDir, wf);
+    const full = resolveSafePath(serverDir, wf);
     if (fs.existsSync(full)) {
       zip.addLocalFolder(full, wf);
     }
@@ -1165,7 +1258,7 @@ ipcMain.handle('server:create-backup', async (_e, serverId, name) => {
 
   // Add configuration files
   ['server.properties', 'ops.json', 'whitelist.json'].forEach(f => {
-    const full = path.join(serverDir, f);
+    const full = resolveSafePath(serverDir, f);
     if (fs.existsSync(full)) {
       zip.addLocalFile(full);
     }
@@ -1176,18 +1269,29 @@ ipcMain.handle('server:create-backup', async (_e, serverId, name) => {
 });
 
 ipcMain.handle('server:restore-backup', async (_e, serverId, fileName) => {
-  const serverDir = path.join(SERVERS_DIR, serverId);
-  const zipPath = path.join(serverDir, 'backups', fileName);
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const safeFileName = path.basename(fileName);
+  const zipPath = resolveSafePath(serverDir, 'backups', safeFileName);
 
   if (!fs.existsSync(zipPath)) throw new Error('Backup file does not exist');
 
   const zip = new AdmZip(zipPath);
+  // Zip Slip vulnerability protection: verify every entry resolves within serverDir
+  const zipEntries = zip.getEntries();
+  for (const entry of zipEntries) {
+    resolveSafePath(serverDir, entry.entryName);
+  }
+
   zip.extractAllTo(serverDir, true);
   return { success: true };
 });
 
 ipcMain.handle('server:delete-backup', async (_e, serverId, fileName) => {
-  const zipPath = path.join(SERVERS_DIR, serverId, 'backups', fileName);
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const safeFileName = path.basename(fileName);
+  const zipPath = resolveSafePath(serverDir, 'backups', safeFileName);
   if (fs.existsSync(zipPath)) {
     fs.unlinkSync(zipPath);
   }
@@ -1199,16 +1303,19 @@ ipcMain.handle('server:delete-backup', async (_e, serverId, fileName) => {
 // =========================================================================
 
 ipcMain.handle('server:get-crash-reports', async (_e, serverId) => {
-  const crashDir = path.join(SERVERS_DIR, serverId, 'crash-reports');
+  const safeId = sanitizeId(serverId);
+  const serverDir = resolveSafePath(SERVERS_DIR, safeId);
+  const crashDir = resolveSafePath(serverDir, 'crash-reports');
   if (!fs.existsSync(crashDir)) return [];
 
   const files = fs.readdirSync(crashDir).filter(f => f.endsWith('.txt'));
   return files.map(f => {
-    const fullPath = path.join(crashDir, f);
+    const safeF = path.basename(f);
+    const fullPath = resolveSafePath(crashDir, safeF);
     const content = fs.readFileSync(fullPath, 'utf-8');
     const firstLines = content.split('\n').slice(0, 15).join('\n');
     return {
-      fileName: f,
+      fileName: safeF,
       date: fs.statSync(fullPath).mtimeMs,
       summary: firstLines,
       fullContent: content
@@ -1250,7 +1357,7 @@ ipcMain.handle('tunnel:start-playit', async () => {
       playitProcess = null;
     });
     return { success: true };
-  } catch (err) {
+  } catch {
     return { success: false, message: 'playit command not found on PATH. Please install playit.gg CLI.' };
   }
 });
@@ -1260,7 +1367,7 @@ ipcMain.handle('tunnel:stop-playit', async () => {
     try {
       playitProcess.kill();
       playitProcess = null;
-    } catch (e) {}
+    } catch {}
   }
   return { success: true };
 });

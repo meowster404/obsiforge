@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { neonAuth, ObsiUser, AuditLogEntry } from '../services/neonAuth';
-import { UserCheck, Key, Shield, AlertTriangle, CheckCircle, RefreshCw, X, ShieldAlert, Lock, Mail, User, LogOut } from 'lucide-react';
+import { Key, Shield, AlertTriangle, CheckCircle, RefreshCw, X, ShieldAlert, Lock, User, LogOut } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -16,7 +16,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onUserChanged
 }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'audit'>('profile');
-  const [emailInput, setEmailInput] = useState('');
+  const [emailInput, setEmailInput] = useState(currentUser?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,12 +37,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   useEffect(() => {
-    if (!isOpen) return;
-    setStatusMsg(null);
-    if (currentUser) {
-      setEmailInput(currentUser.email || '');
-      loadAuditLogs();
-    }
+    if (!isOpen || !currentUser) return;
+    let isCancelled = false;
+    neonAuth.fetchAuditLogs(25).then(logs => {
+      if (!isCancelled) setAuditLogs(logs);
+    }).catch(err => {
+      console.error('Error fetching logs:', err);
+    });
+    return () => {
+      isCancelled = true;
+    };
   }, [isOpen, currentUser]);
 
   if (!isOpen) return null;
@@ -104,7 +108,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         second: '2-digit',
         hour12: true
       });
-    } catch (e) {
+    } catch {
       return ts;
     }
   };

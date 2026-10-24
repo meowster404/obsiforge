@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ServerConfig } from '../types/electron';
 import { neonAuth, OciGuiConfig, cleanMinecraftAddress } from '../services/neonAuth';
-import { Cloud, Copy, Check, Terminal, ExternalLink, ShieldCheck, Play, Square, Key, Save, Download, Server, RefreshCw, Eye, EyeOff, Cpu, HardDrive, Globe, Zap } from 'lucide-react';
+import { Cloud, Copy, Check, Terminal, ExternalLink, ShieldCheck, Play, Square, Save, Download, Eye, EyeOff, Cpu, Globe, Zap } from 'lucide-react';
+import { OciApiKeyRequiredModal } from './OciApiKeyRequiredModal';
 
 interface CloudNetworkViewProps {
   server: ServerConfig | null;
@@ -10,6 +11,7 @@ interface CloudNetworkViewProps {
 
 export const CloudNetworkView: React.FC<CloudNetworkViewProps> = ({ server, onConfigUpdated }) => {
   const [subTab, setSubTab] = useState<'oci_config' | 'scripts' | 'tunnels'>('oci_config');
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
 
   // Oracle Cloud GUI Configuration State
   const [ociConfig, setOciConfig] = useState<OciGuiConfig>({
@@ -20,7 +22,7 @@ export const CloudNetworkView: React.FC<CloudNetworkViewProps> = ({ server, onCo
     region: 'us-ashburn-1',
     privateKeyPem: '',
     instanceIp: '',
-    instancePort: 25565,
+    instancePort: server?.port || 25565,
     tunnelAddress: '',
     securityListOcid: '',
     cloudTier: 'ampere_a1',
@@ -37,10 +39,6 @@ export const CloudNetworkView: React.FC<CloudNetworkViewProps> = ({ server, onCo
   const [playitRunning, setPlayitRunning] = useState(false);
 
   useEffect(() => {
-    if (server) {
-      setOciConfig(prev => ({ ...prev, instancePort: server.port || 25565 }));
-    }
-
     if (window.mcServerAPI) {
       const unsub = window.mcServerAPI.onTunnelLog((log) => {
         setPlayitLogs(prev => [...prev.slice(-30), log]);
@@ -59,7 +57,7 @@ export const CloudNetworkView: React.FC<CloudNetworkViewProps> = ({ server, onCo
       });
       return () => unsub();
     }
-  }, [server]);
+  }, []);
 
   useEffect(() => {
     neonAuth.loadOciConfig().then(loaded => {
@@ -68,7 +66,7 @@ export const CloudNetworkView: React.FC<CloudNetworkViewProps> = ({ server, onCo
         if (onConfigUpdated) onConfigUpdated(loaded);
       }
     });
-  }, []);
+  }, [onConfigUpdated]);
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -77,6 +75,18 @@ export const CloudNetworkView: React.FC<CloudNetworkViewProps> = ({ server, onCo
   };
 
   const handleSaveOciConfig = async () => {
+    /*
+     * ============================================================================
+     * [TESTING HOOK] ORACLE CLOUD API KEY REQUIREMENT SCREEN
+     * To enforce API key insertion before using this Oracle Cloud function,
+     * uncomment the code block below. Currently commented out for testing.
+     * ============================================================================
+     * if (!ociConfig.privateKeyPem || !ociConfig.tenancyOcid || !ociConfig.userOcid || !ociConfig.fingerprint) {
+     *   setShowApiKeyModal(true);
+     *   return;
+     * }
+     */
+
     setStatusMsg({ type: 'info', text: 'Encrypting and persisting OCI configuration...' });
     const success = await neonAuth.saveOciConfig(ociConfig);
     if (success) {
@@ -734,6 +744,18 @@ echo "[OBSIFORGE] Public Join IP: ${ociConfig.instanceIp || 'YOUR_INSTANCE_IP'}:
           </div>
         </div>
       )}
+
+      {/*
+       * ============================================================================
+       * [TESTING HOOK] ORACLE CLOUD API KEY REQUIRED MODAL
+       * Can be triggered when testing or enforcing mandatory OCI API key check.
+       * ============================================================================
+       */}
+      <OciApiKeyRequiredModal
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        functionName="Oracle Cloud GUI Configuration & Persistence"
+      />
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ServerConfig } from '../types/electron';
 import { OciGuiConfig } from '../services/neonAuth';
-import { Folder, File, Terminal, X, Copy, Check, Download, ExternalLink, HardDrive, Server, Globe, Eye, AlertTriangle } from 'lucide-react';
+import { Folder, File, Terminal, X, Copy, Check, Server, Eye, AlertTriangle } from 'lucide-react';
 
 interface CloudServerDirModalProps {
   isOpen: boolean;
@@ -36,9 +36,6 @@ export const CloudServerDirModal: React.FC<CloudServerDirModalProps> = ({
   const sftpCommand = hasOciConfigured 
     ? `sftp ubuntu@${vmHost}:${remoteDirPath}`
     : `sftp ubuntu@[YOUR_ORACLE_IP]:${remoteDirPath}`;
-  const sshCommand = hasOciConfigured
-    ? `ssh ubuntu@${vmHost} "ls -la ${remoteDirPath}"`
-    : `ssh ubuntu@[YOUR_ORACLE_IP] "ls -la ${remoteDirPath}"`;
 
   const files: CloudFileEntry[] = [
     { name: 'world', type: 'folder', size: '124.5 MB', modified: 'Just now', description: 'Overworld region chunks (region/*.mca) & level.dat' },
@@ -72,7 +69,7 @@ export const CloudServerDirModal: React.FC<CloudServerDirModalProps> = ({
           setFileContent(content || `# ${fileName} (Cloud File)`);
           return;
         }
-      } catch (e) {}
+      } catch {}
     }
     setFileContent(`[REMOTE CLOUD FILE INSPECTION: ${fileName}]\nPath: ${remoteDirPath}/${fileName}\nHost: ${vmHost}\nStatus: Synced on Oracle Cloud VM 24/7 filesystem.`);
   };

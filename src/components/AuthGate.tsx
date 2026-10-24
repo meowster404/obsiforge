@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { neonAuth, ObsiUser, OciGuiConfig } from '../services/neonAuth';
 import { ASCII_LOGO } from '../utils/ascii';
-import { LogIn, UserPlus, Cloud, ArrowRight, ShieldCheck, CheckCircle, AlertTriangle, Key } from 'lucide-react';
+import { LogIn, UserPlus, Cloud, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
 
 interface AuthGateProps {
   onAuthenticated: (user: ObsiUser) => void;
@@ -46,11 +46,10 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
       if (res.success && res.user) {
         setAuthenticatedUser(res.user);
         setStatusMsg({ type: 'success', text: `Welcome Administrator ${res.user.username}! Setting up cluster session...` });
-        // Proceed to optional Oracle Cloud onboarding step
+        // Proceed directly to dashboard (can configure Oracle Cloud anytime later in settings)
         setTimeout(() => {
-          setAuthMode('oci_onboarding');
-          setStatusMsg(null);
-        }, 800);
+          onAuthenticated(res.user!);
+        }, 700);
       } else {
         setStatusMsg({ type: 'error', text: res.message || 'Registration failed.' });
       }
@@ -69,16 +68,6 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
       setLoading(false);
       if (res.success && res.user) {
         setAuthenticatedUser(res.user);
-        // Verify Oracle Cloud credentials exist
-        const savedOci = await neonAuth.loadOciConfig(password);
-        if (!savedOci || !savedOci.instanceIp || !savedOci.tenancyOcid) {
-          setStatusMsg({ type: 'info', text: 'Oracle Cloud credentials required. Please enter your OCI keys to continue...' });
-          setTimeout(() => {
-            setAuthMode('oci_onboarding');
-            setStatusMsg(null);
-          }, 800);
-          return;
-        }
         setStatusMsg({ type: 'success', text: `Identity verified: ${res.user.username} [${res.user.role.toUpperCase()}]` });
         setTimeout(() => {
           onAuthenticated(res.user!);
@@ -166,7 +155,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
             <img src="./logo.png" alt="ObsiForge" style={{ width: '22px', height: '22px', objectFit: 'contain', filter: 'drop-shadow(0 0 6px #00e5ff)' }} />
             <span className="header-allcaps">OBSIFORGE // SYSTEM ACCESS &amp; AUTHENTICATION GATE</span>
           </div>
-          <span className="text-secondary" style={{ fontSize: '10px', fontWeight: 700 }}>v1.0.0b [BETA]</span>
+          <span className="text-secondary" style={{ fontSize: '10px', fontWeight: 700 }}>v1.0.1b [BETA]</span>
         </div>
 
         {/* ASCII Banner */}
@@ -326,22 +315,22 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
         ) : (
           /* ========================================================================= */
           /* ========================================================================= */
-          /* STEP 2: ORACLE CLOUD 24/7 SETUP (MANDATORY)                              */
+          /* STEP 2: ORACLE CLOUD 24/7 SETUP (OPTIONAL)                                */
           /* ========================================================================= */
           <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div className="cli-pane" style={{ background: '#0b1d0b', border: '1px solid var(--primary)', padding: '12px' }}>
               <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Cloud size={16} /> STEP 2: ORACLE CLOUD 24/7 SETUP (MANDATORY KEYS REQUIRED)
+                <Cloud size={16} /> ORACLE CLOUD 24/7 SETUP (OPTIONAL - CAN CONFIGURE LATER IN SETTINGS)
               </div>
               <p className="text-muted" style={{ fontSize: '11px', marginTop: '4px', lineHeight: '1.5' }}>
-                ObsiForge hosts and operates your 24/7 Minecraft server on your Oracle Cloud Infrastructure (OCI) instance (Always-Free ARM up to 24GB RAM). <strong>You cannot proceed without valid Oracle Cloud keys.</strong> All credentials are encrypted locally with AES-GCM before storage.
+                ObsiForge can host and operate your 24/7 Minecraft server on your Oracle Cloud Infrastructure (OCI) instance (Always-Free ARM up to 24GB RAM). You can configure your keys now or enter the dashboard and add them anytime later from <strong>[7] 24/7 CLOUD &amp; TUNNELS</strong>.
               </p>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
-                  TENANCY OCID <span className="text-error">*</span>:
+                  TENANCY OCID:
                 </label>
                 <input
                   type="text"
@@ -349,13 +338,12 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
                   placeholder="ocid1.tenancy.oc1..aaaaaxxxx..."
                   value={ociConfig.tenancyOcid}
                   onChange={(e) => setOciConfig({ ...ociConfig, tenancyOcid: e.target.value })}
-                  required
                 />
               </div>
 
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
-                  USER OCID <span className="text-error">*</span>:
+                  USER OCID:
                 </label>
                 <input
                   type="text"
@@ -363,7 +351,6 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
                   placeholder="ocid1.user.oc1..aaaaaxxxx..."
                   value={ociConfig.userOcid}
                   onChange={(e) => setOciConfig({ ...ociConfig, userOcid: e.target.value })}
-                  required
                 />
               </div>
 
@@ -382,7 +369,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
 
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
-                  API KEY FINGERPRINT <span className="text-error">*</span>:
+                  API KEY FINGERPRINT:
                 </label>
                 <input
                   type="text"
@@ -390,13 +377,12 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
                   placeholder="20:3b:97:13:55:1c:xx:xx..."
                   value={ociConfig.fingerprint}
                   onChange={(e) => setOciConfig({ ...ociConfig, fingerprint: e.target.value })}
-                  required
                 />
               </div>
 
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
-                  OCI REGION <span className="text-error">*</span>:
+                  OCI REGION:
                 </label>
                 <select
                   className="cli-select"
@@ -410,7 +396,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
 
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
-                  INSTANCE PUBLIC IPV4 <span className="text-error">*</span>:
+                  INSTANCE PUBLIC IPV4:
                 </label>
                 <input
                   type="text"
@@ -418,14 +404,13 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
                   placeholder="e.g. 129.153.xx.xx"
                   value={ociConfig.instanceIp}
                   onChange={(e) => setOciConfig({ ...ociConfig, instanceIp: e.target.value })}
-                  required
                 />
               </div>
             </div>
 
             <div>
               <label style={{ fontSize: '11px', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
-                PRIVATE KEY (PEM FORMAT) <span className="text-error">*</span>:
+                PRIVATE KEY (PEM FORMAT):
               </label>
               <textarea
                 className="cli-input"
@@ -433,14 +418,22 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
                 placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;MIIEowIBAAKCAQEA...&#10;-----END RSA PRIVATE KEY-----"
                 value={ociConfig.privateKeyPem}
                 onChange={(e) => setOciConfig({ ...ociConfig, privateKeyPem: e.target.value })}
-                required
               />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-              <span className="text-muted" style={{ fontSize: '11px' }}>
-                <span className="text-error">*</span> ALL KEYS MANDATORY FOR 24/7 CLOUD HOSTING
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', flexWrap: 'wrap', gap: '8px' }}>
+              <button
+                type="button"
+                className="cli-btn cli-btn-muted"
+                style={{ fontSize: '11px', padding: '8px 16px' }}
+                onClick={() => {
+                  if (authenticatedUser) {
+                    onAuthenticated(authenticatedUser);
+                  }
+                }}
+              >
+                [ SKIP FOR NOW // ENTER MAIN DASHBOARD ]
+              </button>
               <button
                 className="cli-btn"
                 style={{ fontWeight: 800, padding: '8px 18px', background: 'rgba(51, 255, 0, 0.15)' }}

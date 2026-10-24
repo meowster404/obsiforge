@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UpdateInfo, gitHubUpdater, APP_CURRENT_VERSION } from '../services/updater';
-import { RefreshCw, Download, ExternalLink, CheckCircle, AlertCircle, X, Shield, ArrowUpRight } from 'lucide-react';
+import { RefreshCw, Download, CheckCircle, AlertCircle, X, Shield, ArrowUpRight } from 'lucide-react';
 
 interface UpdateModalProps {
   isOpen: boolean;

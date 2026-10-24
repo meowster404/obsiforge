@@ -1,4 +1,4 @@
-import { McServerAPI, ServerConfig } from '../types/electron';
+import { ServerConfig } from '../types/electron';
 
 export function initializeMockAPIIfNeeded() {
   if (typeof window !== 'undefined' && !window.mcServerAPI) {

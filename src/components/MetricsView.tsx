@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ServerConfig, ResourceStats, SystemInfo } from '../types/electron';
 import { generateAsciiBar, MINI_ASCII_BANNER } from '../utils/ascii';
-import { Cpu, HardDrive, Clock, Users, Activity, ShieldCheck } from 'lucide-react';
+import { Cpu, HardDrive, Clock, Activity } from 'lucide-react';
 
 interface MetricsViewProps {
   server: ServerConfig | null;
@@ -17,13 +17,15 @@ export const MetricsView: React.FC<MetricsViewProps> = ({
   const [history, setHistory] = useState<Array<{ time: string; cpu: number; mem: number }>>([]);
 
   useEffect(() => {
-    if (stats) {
+    if (!stats) return;
+    const timer = setTimeout(() => {
       const now = new Date().toLocaleTimeString();
       setHistory(prev => {
         const next = [...prev, { time: now, cpu: stats.cpu, mem: stats.memoryMb }];
-        return next.slice(-20); // keep last 20 ticks
+        return next.slice(-20);
       });
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [stats]);
 
   const isOnline = server?.status === 'running';
