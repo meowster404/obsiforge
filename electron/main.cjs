@@ -792,6 +792,8 @@ async function startServerProcess(serverId) {
       });
     });
 
+    session.spawnFailed = false;
+
     child.on('close', (code) => {
       sendLog(safeId, `[SYSTEM] Server process exited with code ${code}.`);
       if (session.statsTimer) clearInterval(session.statsTimer);
@@ -799,8 +801,8 @@ async function startServerProcess(serverId) {
       session.process = null;
       notifyStatus(safeId, 'stopped');
 
-      // Watchdog Auto-Restart check
-      if (code !== 0 && server.autoRestart && session.watchdogRetries < 3) {
+      // Watchdog Auto-Restart check (only if process spawned successfully and crashed unexpectedly)
+      if (!session.spawnFailed && code !== 0 && server.autoRestart && session.watchdogRetries < 3) {
         session.watchdogRetries++;
         sendLog(safeId, `[WATCHDOG] Abnormal crash detected! Automatic restart scheduled in 5 seconds (Attempt ${session.watchdogRetries}/3)...`);
         setTimeout(() => {
@@ -812,7 +814,13 @@ async function startServerProcess(serverId) {
     });
 
     child.on('error', (err) => {
-      sendLog(safeId, `[SYSTEM ERROR] Failed to start server process: ${err.message}`);
+      session.spawnFailed = true;
+      if (err.code === 'ENOENT' || err.message?.includes('ENOENT')) {
+        sendLog(safeId, `[SYSTEM ERROR] Java runtime executable was not found: "${javaExec}" (ENOENT)`);
+        sendLog(safeId, `[SYSTEM GUIDE] Minecraft servers require Java (JDK 21 or JDK 17). Please install Java on your PC or specify the custom java.exe path in Server Configuration.`);
+      } else {
+        sendLog(safeId, `[SYSTEM ERROR] Failed to start server process: ${err.message}`);
+      }
       session.status = 'stopped';
       notifyStatus(safeId, 'stopped');
     });
