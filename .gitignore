@@ -56,3 +56,8 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Developer Notes & Roadmap
+TODO.md
+todo.md
+
