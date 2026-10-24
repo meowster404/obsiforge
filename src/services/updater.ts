@@ -73,7 +73,8 @@ export class GitHubUpdaterService {
    */
   public async checkForUpdates(): Promise<UpdateInfo> {
     try {
-      const res = await fetch(`https://api.github.com/repos/${this.repo}/releases/latest`, {
+      // Query /releases instead of /releases/latest because GitHub hides pre-releases from /latest
+      const res = await fetch(`https://api.github.com/repos/${this.repo}/releases`, {
         headers: {
           'Accept': 'application/vnd.github.v3+json'
         }
@@ -99,14 +100,31 @@ export class GitHubUpdaterService {
         throw new Error(`GitHub API returned status ${res.status}`);
       }
 
-      const data = await res.json();
-      const latestTag = data.tag_name || data.name || APP_CURRENT_VERSION;
+      const releases = await res.json();
+      if (!Array.isArray(releases) || releases.length === 0) {
+        const fallback: UpdateInfo = {
+          hasUpdate: false,
+          currentVersion: APP_CURRENT_VERSION,
+          latestVersion: APP_CURRENT_VERSION,
+          releaseName: 'Latest Build',
+          releaseNotes: 'No releases published yet on GitHub.',
+          publishedAt: new Date().toISOString(),
+          downloadUrl: `https://github.com/${this.repo}/releases`,
+          htmlUrl: `https://github.com/${this.repo}`,
+          checkedAt: Date.now()
+        };
+        this.lastCheckResult = fallback;
+        return fallback;
+      }
+
+      const latestRelease = releases[0];
+      const latestTag = latestRelease.tag_name || latestRelease.name || APP_CURRENT_VERSION;
       const hasUpdate = this.isNewerVersion(latestTag, APP_CURRENT_VERSION);
 
       // Find direct .exe asset if available in release assets
-      let downloadUrl = data.html_url;
-      if (Array.isArray(data.assets) && data.assets.length > 0) {
-        const exeAsset = data.assets.find((a: any) => a.name?.toLowerCase().endsWith('.exe'));
+      let downloadUrl = latestRelease.html_url;
+      if (Array.isArray(latestRelease.assets) && latestRelease.assets.length > 0) {
+        const exeAsset = latestRelease.assets.find((a: any) => a.name?.toLowerCase().endsWith('.exe'));
         if (exeAsset && exeAsset.browser_download_url) {
           downloadUrl = exeAsset.browser_download_url;
         }
@@ -116,11 +134,11 @@ export class GitHubUpdaterService {
         hasUpdate,
         currentVersion: APP_CURRENT_VERSION,
         latestVersion: latestTag.replace(/^v/i, ''),
-        releaseName: data.name || latestTag,
-        releaseNotes: data.body || 'No changelog description provided.',
-        publishedAt: data.published_at || new Date().toISOString(),
+        releaseName: latestRelease.name || latestTag,
+        releaseNotes: latestRelease.body || 'No changelog description provided.',
+        publishedAt: latestRelease.published_at || new Date().toISOString(),
         downloadUrl,
-        htmlUrl: data.html_url || `https://github.com/${this.repo}/releases`,
+        htmlUrl: latestRelease.html_url || `https://github.com/${this.repo}/releases`,
         checkedAt: Date.now()
       };
 

@@ -35,7 +35,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "ObsiForge"
+      "shortcutName": "ObsiForge",
+      "include": "electron/installer.nsh"
     }
   },
   "dependencies": {
