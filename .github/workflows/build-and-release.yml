@@ -46,7 +46,7 @@ jobs:
         run: |
           for ($i = 1; $i -le 3; $i++) {
             Write-Host "Compiling Windows binaries via electron-builder (Attempt $i of 3)..."
-            npx electron-builder --win --x64 --ia32 --arm64
+            npx electron-builder --win --x64 --arm64
             if ($LASTEXITCODE -eq 0) {
               Write-Host "Compilation succeeded on Attempt $i."
               exit 0
