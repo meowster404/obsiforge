@@ -246,7 +246,9 @@ export function initializeMockAPIIfNeeded() {
       onServerStatusChanged: (cb) => { statusListeners.push(cb); return () => { statusListeners = statusListeners.filter(l => l !== cb); }; },
       onResourceStats: (cb) => { statsListeners.push(cb); return () => { statsListeners = statsListeners.filter(l => l !== cb); }; },
       onTunnelLog: () => () => {},
-      onDownloadProgress: () => () => {}
+      onDownloadProgress: () => () => {},
+      downloadAndInstallUpdate: async () => ({ success: true }),
+      onUpdateDownloadProgress: () => () => {}
     };
   }
 }

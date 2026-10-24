@@ -236,6 +236,71 @@ ipcMain.handle('system:open-folder', async (_e, folderPath) => {
   return true;
 });
 
+ipcMain.handle('system:download-and-install-update', async (_e, downloadUrl) => {
+  try {
+    const tempDir = app.getPath('temp');
+    const installerFileName = `ObsiForge-Setup-${Date.now()}.exe`;
+    const targetPath = path.join(tempDir, installerFileName);
+
+    const writer = fs.createWriteStream(targetPath);
+    const response = await axios({
+      url: downloadUrl,
+      method: 'GET',
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'ObsiForge-Updater'
+      }
+    });
+
+    const totalLength = parseInt(response.headers['content-length'] || '0', 10);
+    let downloadedLength = 0;
+
+    response.data.on('data', (chunk) => {
+      downloadedLength += chunk.length;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const percent = totalLength > 0 ? Math.round((downloadedLength / totalLength) * 100) : 0;
+        mainWindow.webContents.send('update:download-progress', {
+          percent,
+          transferredMb: (downloadedLength / (1024 * 1024)).toFixed(1),
+          totalMb: totalLength > 0 ? (totalLength / (1024 * 1024)).toFixed(1) : 'Unknown',
+          status: 'downloading'
+        });
+      }
+    });
+
+    await new Promise((resolve, reject) => {
+      response.data.pipe(writer);
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update:download-progress', {
+        percent: 100,
+        transferredMb: (downloadedLength / (1024 * 1024)).toFixed(1),
+        totalMb: (downloadedLength / (1024 * 1024)).toFixed(1),
+        status: 'installing'
+      });
+    }
+
+    const child = spawn(targetPath, [], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    child.unref();
+
+    setTimeout(() => {
+      app.isQuitting = true;
+      app.quit();
+    }, 1500);
+
+    return { success: true };
+  } catch (err) {
+    console.error('Update download/install error:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+});
+
 function generateObsiForgeAddress(serverName) {
   const clean = (serverName || 'server')
     .toLowerCase()

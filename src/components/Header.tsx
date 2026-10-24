@@ -97,7 +97,7 @@ export const Header: React.FC<HeaderProps> = ({
             OBSIFORGE
           </span>
           <span className="status-badge" style={{ fontSize: '10px', padding: '1px 5px', color: 'var(--secondary)', borderColor: 'var(--secondary)' }}>
-            v1.0.2b [BETA]
+            v1.0.3b [BETA]
           </span>
           <span className="text-muted" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             | <Cloud size={11} color="var(--primary)" /> OCI VM: <strong className="text-primary">{getTierLabel()}</strong>

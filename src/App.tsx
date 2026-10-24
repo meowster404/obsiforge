@@ -57,6 +57,9 @@ export const App: React.FC = () => {
     // Auto check for software updates from GitHub Releases on application boot
     gitHubUpdater.checkForUpdates().then(info => {
       setUpdateInfo(info);
+      if (info && info.hasUpdate) {
+        setIsUpdateModalOpen(true);
+      }
     });
 
     neonAuth.loadOciConfig().then(cfg => {

@@ -155,7 +155,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, initialMode
             <img src="./logo.png" alt="ObsiForge" style={{ width: '22px', height: '22px', objectFit: 'contain', filter: 'drop-shadow(0 0 6px #00e5ff)' }} />
             <span className="header-allcaps">OBSIFORGE // SYSTEM ACCESS &amp; AUTHENTICATION GATE</span>
           </div>
-          <span className="text-secondary" style={{ fontSize: '10px', fontWeight: 700 }}>v1.0.2b [BETA]</span>
+          <span className="text-secondary" style={{ fontSize: '10px', fontWeight: 700 }}>v1.0.3b [BETA]</span>
         </div>
 
         {/* ASCII Banner */}

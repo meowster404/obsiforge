@@ -10,7 +10,7 @@ export interface UpdateInfo {
   checkedAt: number;
 }
 
-export const APP_CURRENT_VERSION = '1.0.2b';
+export const APP_CURRENT_VERSION = '1.0.3b';
 
 export class GitHubUpdaterService {
   private repo: string;
@@ -121,12 +121,25 @@ export class GitHubUpdaterService {
       const latestTag = latestRelease.tag_name || latestRelease.name || APP_CURRENT_VERSION;
       const hasUpdate = this.isNewerVersion(latestTag, APP_CURRENT_VERSION);
 
-      // Find direct .exe asset if available in release assets
+      // Match installer asset matching current architecture (x64, ia32/x86, arm64)
       let downloadUrl = latestRelease.html_url;
       if (Array.isArray(latestRelease.assets) && latestRelease.assets.length > 0) {
-        const exeAsset = latestRelease.assets.find((a: any) => a.name?.toLowerCase().endsWith('.exe'));
-        if (exeAsset && exeAsset.browser_download_url) {
-          downloadUrl = exeAsset.browser_download_url;
+        const exeAssets = latestRelease.assets.filter((a: any) => a.name?.toLowerCase().endsWith('.exe'));
+        let clientArch = 'x64';
+        try {
+          if ((window as any).mcServerAPI?.getSystemInfo) {
+            const sys = await (window as any).mcServerAPI.getSystemInfo();
+            if (sys?.arch) clientArch = sys.arch.toLowerCase();
+          }
+        } catch {}
+
+        const matchedAsset = exeAssets.find((a: any) => a.name?.toLowerCase().includes(`-${clientArch}`) || a.name?.toLowerCase().includes(`_${clientArch}`))
+          || (clientArch === 'ia32' ? exeAssets.find((a: any) => a.name?.toLowerCase().includes('x86')) : null)
+          || exeAssets.find((a: any) => a.name?.toLowerCase().includes('x64'))
+          || exeAssets[0];
+
+        if (matchedAsset && matchedAsset.browser_download_url) {
+          downloadUrl = matchedAsset.browser_download_url;
         }
       }
 

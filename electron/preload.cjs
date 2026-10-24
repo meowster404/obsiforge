@@ -82,5 +82,11 @@ contextBridge.exposeInMainWorld('mcServerAPI', {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('download:progress', handler);
     return () => ipcRenderer.removeListener('download:progress', handler);
+  },
+  downloadAndInstallUpdate: (url) => ipcRenderer.invoke('system:download-and-install-update', url),
+  onUpdateDownloadProgress: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('update:download-progress', handler);
+    return () => ipcRenderer.removeListener('update:download-progress', handler);
   }
 });

@@ -152,6 +152,8 @@ export interface McServerAPI {
   onResourceStats: (callback: (data: ResourceStats) => void) => () => void;
   onTunnelLog: (callback: (data: string) => void) => () => void;
   onDownloadProgress: (callback: (data: any) => void) => () => void;
+  downloadAndInstallUpdate: (url: string) => Promise<{ success: boolean; error?: string }>;
+  onUpdateDownloadProgress: (callback: (data: { percent: number; transferredMb: string; totalMb: string; status?: string }) => void) => () => void;
 }
 
 declare global {
