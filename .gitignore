@@ -37,6 +37,7 @@ id_rsa*
 servers/
 crash-reports/
 backups/
+obsiforge/
 *.jar
 *.mca
 *.dat
