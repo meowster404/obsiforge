@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ServerConfig, JavaRuntime, WorldInfo } from '../types/electron';
 import { generateObsiForgeAddress } from '../services/neonAuth';
-import { Settings, Globe, Cpu, Save, RefreshCw, Check, Folder, AlertTriangle, Sparkles, Flame, Moon, Compass, Trash2 } from 'lucide-react';
+import { Settings, Globe, Cpu, Save, RefreshCw, Check, Folder, AlertTriangle, Flame, Moon, Compass, Trash2 } from 'lucide-react';
 
 interface ConfigViewProps {
   server: ServerConfig | null;
@@ -87,14 +87,6 @@ export const ConfigView: React.FC<ConfigViewProps> = ({ server, onUpdateServerCo
     }
   };
 
-  const handleGenerateRandomSeed = () => {
-    // Generate high-entropy 64-bit integer seed string
-    const sign = Math.random() > 0.5 ? '' : '-';
-    const randPart = Math.floor(Math.random() * 8999999999999999 + 1000000000000000).toString();
-    const newSeed = `${sign}${randPart}`;
-    handlePropertyChange('level-seed', newSeed);
-  };
-
   const handleOpenWorldFolder = () => {
     if (server?.serverDir) {
       const worldFolder = properties['level-name'] || 'world';
@@ -110,13 +102,19 @@ export const ConfigView: React.FC<ConfigViewProps> = ({ server, onUpdateServerCo
     }
     setResettingWorld(true);
     try {
-      const seedToUse = properties['level-seed'] || '';
-      const res = await window.mcServerAPI.resetWorld(server.id, seedToUse);
+      // Automatically generate a new random seed for the fresh world instance
+      const sign = Math.random() > 0.5 ? '' : '-';
+      const randPart = Math.floor(Math.random() * 8999999999999999 + 1000000000000000).toString();
+      const freshRandomSeed = `${sign}${randPart}`;
+
+      const res = await window.mcServerAPI.resetWorld(server.id, freshRandomSeed);
       if (res && res.success) {
+        const assignedSeed = res.newSeed || freshRandomSeed;
         setShowResetDialog(false);
         setResetConfirmInput('');
+        setProperties(prev => ({ ...prev, 'level-seed': assignedSeed }));
         await loadWorldInfo();
-        alert('World reset initiated. Next time the server boots, Minecraft will generate clean terrain with your configured seed.');
+        alert(`World reset complete! A new random terrain seed (${assignedSeed}) has been generated and configured. When the server boots, a brand-new world will generate.`);
       } else {
         alert('Failed resetting world.');
       }
@@ -410,27 +408,22 @@ export const ConfigView: React.FC<ConfigViewProps> = ({ server, onUpdateServerCo
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary)' }}>
-                    LEVEL SEED (level-seed):
+                    ACTIVE WORLD SEED (level-seed):
                   </label>
-                  <button
-                    className="cli-btn cli-btn-secondary"
-                    style={{ fontSize: '11px', padding: '3px 10px' }}
-                    onClick={handleGenerateRandomSeed}
-                    title="Generate a random high-entropy Minecraft seed"
-                  >
-                    <Sparkles size={12} /> [ 🎲 GENERATE RANDOM SEED ]
-                  </button>
+                  <span className="text-muted" style={{ fontSize: '10px', letterSpacing: '0.06em' }}>
+                    [ LOCKED TO CURRENT WORLD ]
+                  </span>
                 </div>
                 <input
                   type="text"
                   className="cli-input"
-                  style={{ fontSize: '13px', letterSpacing: '0.08em', fontWeight: 600 }}
+                  style={{ fontSize: '13px', letterSpacing: '0.08em', fontWeight: 600, opacity: 0.9, background: '#0b130b', cursor: 'default' }}
                   value={properties['level-seed'] || ''}
-                  onChange={(e) => handlePropertyChange('level-seed', e.target.value)}
-                  placeholder="Leave blank for random generation or enter custom numeric seed..."
+                  readOnly
+                  title="World seed is immutable once the server is created. Resetting the world will automatically generate a new random seed."
                 />
-                <div className="text-muted" style={{ fontSize: '11px', marginTop: '4px' }}>
-                  * Seeds affect newly generated chunks. Changing the seed will not alter existing explored chunks unless the world is reset.
+                <div className="text-muted" style={{ fontSize: '11px', marginTop: '6px', lineHeight: '1.4' }}>
+                  * The world seed is locked to this generated world. Custom seed selection is configured during initial server instance creation. To regenerate a fresh world with a new seed, click <strong>[ RESET &amp; REGENERATE WORLD ]</strong> below—ObsiForge will automatically roll a new random seed.
                 </div>
               </div>
 
@@ -540,7 +533,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({ server, onUpdateServerCo
                 </div>
                 <div className="text-muted" style={{ fontSize: '11px', marginTop: '4px', maxWidth: '650px', lineHeight: '1.4' }}>
                   Permanently deletes existing terrain chunks, buildings, player inventories, and structures in <code>/{properties['level-name'] || 'world'}</code>.
-                  Next time you boot the server, a pristine world will be generated using the configured seed.
+                  A fresh high-entropy random world seed will be automatically generated and assigned, producing clean uncorrupted terrain on next server boot.
                 </div>
               </div>
 

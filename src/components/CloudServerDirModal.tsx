@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ServerConfig } from '../types/electron';
 import { OciGuiConfig } from '../services/neonAuth';
-import { Folder, File, Terminal, X, Copy, Check, Server, Eye, AlertTriangle } from 'lucide-react';
+import { Folder, File, Terminal, X, Copy, Check, Server, HardDrive, FolderOpen, CloudOff } from 'lucide-react';
 
 interface CloudServerDirModalProps {
   isOpen: boolean;
@@ -60,18 +60,24 @@ export const CloudServerDirModal: React.FC<CloudServerDirModalProps> = ({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const handleOpenLocalFolder = () => {
+    if (server.serverDir && window.mcServerAPI) {
+      window.mcServerAPI.openFolder(server.serverDir);
+    }
+  };
+
   const handleInspectFile = async (fileName: string) => {
     setSelectedFile(fileName);
     if (fileName === 'server.properties' || fileName === 'eula.txt' || fileName === 'ops.json' || fileName === 'whitelist.json') {
       try {
         if (window.mcServerAPI) {
           const content = await window.mcServerAPI.getRawFile(server.id, fileName);
-          setFileContent(content || `# ${fileName} (Cloud File)`);
+          setFileContent(content || `# ${fileName}`);
           return;
         }
       } catch {}
     }
-    setFileContent(`[REMOTE CLOUD FILE INSPECTION: ${fileName}]\nPath: ${remoteDirPath}/${fileName}\nHost: ${vmHost}\nStatus: Synced on Oracle Cloud VM 24/7 filesystem.`);
+    setFileContent(`[FILE INSPECTION: ${fileName}]\nPath: ${remoteDirPath}/${fileName}\nHost: ${vmHost}\nStatus: Synced on filesystem.`);
   };
 
   return (
@@ -98,192 +104,282 @@ export const CloudServerDirModal: React.FC<CloudServerDirModalProps> = ({
         {/* Modal Header */}
         <div className="cli-pane-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Server size={14} color="var(--primary)" />
-            <span style={{ fontWeight: 800 }}>ORACLE CLOUD REMOTE SERVER DIRECTORY EXPLORER</span>
+            {hasOciConfigured ? <Server size={14} color="var(--primary)" /> : <HardDrive size={14} color="var(--cyan)" />}
+            <span style={{ fontWeight: 800 }}>
+              {hasOciConfigured 
+                ? 'ORACLE CLOUD REMOTE SERVER DIRECTORY EXPLORER'
+                : 'SERVER INSTANCE DIRECTORY // LOCAL STORAGE'}
+            </span>
           </span>
           <button className="cli-btn cli-btn-muted" style={{ padding: '2px 6px' }} onClick={onClose}>
             <X size={14} />
           </button>
         </div>
 
-        {/* Unlinked OCI Warning Banner */}
-        {!hasOciConfigured && (
-          <div style={{
-            padding: '8px 16px',
-            background: 'rgba(255, 51, 51, 0.12)',
-            borderBottom: '1px solid var(--error)',
-            color: 'var(--error)',
-            fontSize: '11px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <AlertTriangle size={14} />
-            <span>
-              <strong>ORACLE CLOUD INSTANCE NOT CONNECTED:</strong> No Oracle Cloud keys found on your account. Configure your OCI Tenancy &amp; Instance IP in <strong>[CLOUD NETWORK]</strong> to enable remote sync.
-            </span>
-          </div>
-        )}
-
-        {/* Cloud Metadata Banner */}
-        <div style={{ padding: '12px 16px', background: '#050c05', borderBottom: '1px solid var(--border)', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-            <div>
-              <span className="text-muted">HOST INSTANCE: </span>
-              {hasOciConfigured ? (
-                <>
-                  <strong className="text-primary">{vmHost}</strong> ({ociConfig?.cloudTier?.toUpperCase() || 'AMPERE A1'})
-                </>
-              ) : (
-                <span className="text-error" style={{ fontWeight: 800 }}>[NOT LINKED // KEYS REQUIRED]</span>
-              )}
-            </div>
-            <div>
-              <span className="text-muted">REGION: </span>
-              <span className="text-cyan">{hasOciConfigured ? (ociConfig?.region || 'us-ashburn-1') : 'N/A'}</span>
-            </div>
-            <div>
-              <span className="text-muted">STORAGE LOCATION: </span>
-              <span className="text-amber">Oracle Cloud 24/7 VM Filesystem</span>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#000', padding: '6px 10px', border: '1px solid #143314', marginTop: '4px' }}>
-            <span className="text-muted">REMOTE_PATH:</span>
-            <code style={{ color: 'var(--primary)', flex: 1, overflowX: 'auto', whiteSpace: 'nowrap' }}>
-              {remoteDirPath}
-            </code>
-            <button
-              className="cli-btn cli-btn-secondary"
-              style={{ padding: '2px 8px', fontSize: '10px' }}
-              onClick={() => handleCopy(remoteDirPath, 'dir_path')}
-            >
-              {copiedKey === 'dir_path' ? <Check size={11} /> : <Copy size={11} />}
-              <span>{copiedKey === 'dir_path' ? 'COPIED' : 'COPY PATH'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Content Body: File Explorer Table & Preview */}
-        <div style={{ display: 'grid', gridTemplateColumns: selectedFile ? '1.2fr 1fr' : '1fr', flex: 1, overflow: 'hidden' }}>
-          {/* File List */}
-          <div style={{ overflowY: 'auto', padding: '12px', borderRight: selectedFile ? '1px solid var(--border)' : 'none' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--muted-text)', textAlign: 'left' }}>
-                  <th style={{ padding: '6px 8px' }}>ENTRY NAME</th>
-                  <th style={{ padding: '6px 8px' }}>TYPE</th>
-                  <th style={{ padding: '6px 8px' }}>SIZE</th>
-                  <th style={{ padding: '6px 8px' }}>ACTION</th>
-                </tr>
-              </thead>
-              <tbody>
-                {files.map((f, i) => (
-                  <tr
-                    key={i}
-                    style={{
-                      borderBottom: '1px dashed #143314',
-                      background: selectedFile === f.name ? 'rgba(51, 255, 0, 0.08)' : 'transparent',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => handleInspectFile(f.name)}
-                  >
-                    <td style={{ padding: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {f.type === 'folder' ? (
-                        <Folder size={14} color="var(--primary)" />
-                      ) : (
-                        <File size={14} color="var(--cyan)" />
-                      )}
-                      <div>
-                        <strong style={{ color: f.type === 'folder' ? 'var(--primary)' : '#fff' }}>{f.name}</strong>
-                        <div className="text-muted" style={{ fontSize: '10px' }}>{f.description}</div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '8px', color: 'var(--muted-text)', textTransform: 'uppercase' }}>
-                      {f.type}
-                    </td>
-                    <td style={{ padding: '8px', color: 'var(--cyan)' }}>
-                      {f.size}
-                    </td>
-                    <td style={{ padding: '8px' }}>
-                      <button
-                        className="cli-btn cli-btn-muted"
-                        style={{ padding: '2px 6px', fontSize: '10px' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleInspectFile(f.name);
-                        }}
-                      >
-                        <Eye size={10} /> [VIEW]
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Quick File Viewer Pane */}
-          {selectedFile && (
-            <div style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: '#030803', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '6px', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--cyan)' }}>
-                  &gt; {selectedFile}
-                </span>
-                <button
-                  className="cli-btn cli-btn-muted"
-                  style={{ padding: '2px 6px', fontSize: '10px' }}
-                  onClick={() => setSelectedFile(null)}
-                >
-                  <X size={12} />
-                </button>
+        {/* Unconfigured / Local Storage Information Panel */}
+        {!hasOciConfigured ? (
+          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto' }}>
+            {/* Storage Architecture Overview */}
+            <div style={{
+              padding: '14px',
+              background: '#040d04',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', fontSize: '11px' }}>
+                <div>
+                  <span className="text-muted">STORAGE LOCATION: </span>
+                  <strong className="text-primary">Local Computer Disk (Windows)</strong>
+                </div>
+                <div>
+                  <span className="text-muted">HOST ENVIRONMENT: </span>
+                  <span className="text-cyan">This PC / Desktop Node</span>
+                </div>
+                <div>
+                  <span className="text-muted">CLOUD VM SYNC: </span>
+                  <span className="text-amber" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <CloudOff size={12} /> NOT CONFIGURED (LOCAL ONLY)
+                  </span>
+                </div>
               </div>
 
-              <textarea
-                className="cli-input"
-                style={{
-                  flex: 1,
-                  minHeight: '260px',
-                  fontFamily: 'monospace',
-                  fontSize: '11px',
-                  padding: '8px',
-                  resize: 'none',
-                  background: '#000',
-                  color: 'var(--primary)'
-                }}
-                readOnly
-                value={fileContent}
-              />
+              {/* Local Path & Explorer Action */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: '#000',
+                padding: '8px 12px',
+                border: '1px solid #143314',
+                marginTop: '4px'
+              }}>
+                <span className="text-muted" style={{ fontSize: '11px', fontWeight: 700 }}>LOCAL_PATH:</span>
+                <code style={{ color: 'var(--primary)', flex: 1, overflowX: 'auto', whiteSpace: 'nowrap', fontSize: '12px' }}>
+                  {server.serverDir || 'D:\\Gitworks\\obsiforge\\servers\\' + server.id}
+                </code>
+                <button
+                  className="cli-btn cli-btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: '11px' }}
+                  onClick={() => handleCopy(server.serverDir || '', 'local_path')}
+                >
+                  {copiedKey === 'local_path' ? <Check size={12} /> : <Copy size={12} />}
+                  <span>{copiedKey === 'local_path' ? 'COPIED' : 'COPY PATH'}</span>
+                </button>
+                <button
+                  className="cli-btn"
+                  style={{ padding: '4px 12px', fontSize: '11px', fontWeight: 800 }}
+                  onClick={handleOpenLocalFolder}
+                  title="Open folder directly in Windows File Explorer"
+                >
+                  <FolderOpen size={12} />
+                  <span>[ 📂 OPEN IN EXPLORER ]</span>
+                </button>
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* SFTP / SSH Connection Bar */}
-        <div style={{ padding: '10px 16px', background: '#050c05', borderTop: '1px solid var(--border)', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Terminal size={14} color="var(--primary)" />
-            <span className="text-muted">DIRECT SFTP COMMAND:</span>
-            <code style={{ color: 'var(--cyan)', fontSize: '11px' }}>{sftpCommand}</code>
-          </div>
+            {/* Why am I seeing this explanation box */}
+            <div style={{
+              padding: '14px',
+              background: '#071407',
+              border: '1px dashed var(--border)',
+              fontSize: '12px',
+              lineHeight: '1.6'
+            }}>
+              <div style={{ fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <HardDrive size={14} /> WHERE ARE MY SERVER FILES STORED?
+              </div>
+              <p style={{ color: '#ccc', margin: '0 0 10px 0' }}>
+                You have not added Oracle Cloud API keys or an instance IP yet. Therefore, all server files (including your Minecraft world, player data, mods, and plugins) are stored <strong>locally on your computer</strong> inside the path shown above.
+              </p>
+              <div style={{ background: '#020702', padding: '10px 14px', border: '1px solid #143314' }}>
+                <div style={{ fontWeight: 700, color: 'var(--cyan)', marginBottom: '4px' }}>
+                  WANT 24/7 CLOUD HOSTING ON ORACLE CLOUD?
+                </div>
+                <div style={{ color: '#aaa', fontSize: '11px' }}>
+                  To migrate or deploy this server to an Oracle Cloud Always-Free 24/7 VM (4 OCPUs, 24GB RAM), open the <strong>[CLOUD NETWORK]</strong> tab or <strong>[SETTINGS]</strong> and insert your Oracle Cloud credentials. Once linked, remote cloud filesystem synchronization and direct SFTP commands will activate automatically.
+                </div>
+              </div>
+            </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              className="cli-btn"
-              style={{ fontSize: '11px', padding: '4px 10px' }}
-              onClick={() => handleCopy(sftpCommand, 'sftp')}
-            >
-              {copiedKey === 'sftp' ? <Check size={12} /> : <Copy size={12} />}
-              <span>{copiedKey === 'sftp' ? '[ COPIED SFTP ]' : '[ COPY SFTP ]'}</span>
-            </button>
-            <button
-              className="cli-btn cli-btn-muted"
-              style={{ fontSize: '11px', padding: '4px 10px' }}
-              onClick={onClose}
-            >
-              [ CLOSE ]
-            </button>
+            {/* Close Button */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '8px' }}>
+              <button
+                className="cli-btn"
+                style={{ padding: '6px 16px', fontWeight: 800 }}
+                onClick={handleOpenLocalFolder}
+              >
+                <FolderOpen size={13} /> [ OPEN IN WINDOWS FILE EXPLORER ]
+              </button>
+              <button
+                className="cli-btn cli-btn-muted"
+                style={{ padding: '6px 14px' }}
+                onClick={onClose}
+              >
+                [ CLOSE ]
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* When OCI is Linked & Configured */
+          <>
+            {/* Cloud Metadata Banner */}
+            <div style={{ padding: '12px 16px', background: '#050c05', borderBottom: '1px solid var(--border)', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <span className="text-muted">HOST INSTANCE: </span>
+                  <strong className="text-primary">{vmHost}</strong> ({ociConfig?.cloudTier?.toUpperCase() || 'AMPERE A1'})
+                </div>
+                <div>
+                  <span className="text-muted">REGION: </span>
+                  <span className="text-cyan">{ociConfig?.region || 'us-ashburn-1'}</span>
+                </div>
+                <div>
+                  <span className="text-muted">STORAGE LOCATION: </span>
+                  <span className="text-amber">Oracle Cloud 24/7 VM Filesystem</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#000', padding: '6px 10px', border: '1px solid #143314', marginTop: '4px' }}>
+                <span className="text-muted">REMOTE_PATH:</span>
+                <code style={{ color: 'var(--primary)', flex: 1, overflowX: 'auto', whiteSpace: 'nowrap' }}>
+                  {remoteDirPath}
+                </code>
+                <button
+                  className="cli-btn cli-btn-secondary"
+                  style={{ padding: '2px 8px', fontSize: '10px' }}
+                  onClick={() => handleCopy(remoteDirPath, 'dir_path')}
+                >
+                  {copiedKey === 'dir_path' ? <Check size={11} /> : <Copy size={11} />}
+                  <span>{copiedKey === 'dir_path' ? 'COPIED' : 'COPY PATH'}</span>
+                </button>
+                <button
+                  className="cli-btn"
+                  style={{ padding: '2px 10px', fontSize: '10px' }}
+                  onClick={handleOpenLocalFolder}
+                  title="Open local copy on your PC"
+                >
+                  <FolderOpen size={11} />
+                  <span>LOCAL EXPLORER</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Content Body: File Explorer Table & Preview */}
+            <div style={{ display: 'grid', gridTemplateColumns: selectedFile ? '1.2fr 1fr' : '1fr', flex: 1, overflow: 'hidden' }}>
+              {/* File List */}
+              <div style={{ overflowY: 'auto', padding: '12px', borderRight: selectedFile ? '1px solid var(--border)' : 'none' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--muted-text)', textAlign: 'left' }}>
+                      <th style={{ padding: '6px 8px' }}>ENTRY NAME</th>
+                      <th style={{ padding: '6px 8px' }}>TYPE</th>
+                      <th style={{ padding: '6px 8px' }}>SIZE</th>
+                      <th style={{ padding: '6px 8px' }}>ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {files.map((f, i) => (
+                      <tr
+                        key={i}
+                        style={{
+                          borderBottom: '1px dashed #143314',
+                          background: selectedFile === f.name ? 'rgba(51, 255, 0, 0.08)' : 'transparent',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => handleInspectFile(f.name)}
+                      >
+                        <td style={{ padding: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {f.type === 'folder' ? (
+                            <Folder size={14} color="var(--primary)" />
+                          ) : (
+                            <File size={14} color="var(--cyan)" />
+                          )}
+                          <div>
+                            <strong style={{ color: f.type === 'folder' ? 'var(--primary)' : '#fff' }}>{f.name}</strong>
+                            <div className="text-muted" style={{ fontSize: '10px' }}>{f.description}</div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '8px', color: 'var(--muted-text)', textTransform: 'uppercase' }}>{f.type}</td>
+                        <td style={{ padding: '8px', color: 'var(--cyan)' }}>{f.size}</td>
+                        <td style={{ padding: '8px' }}>
+                          <button
+                            className="cli-btn cli-btn-muted"
+                            style={{ padding: '2px 6px', fontSize: '10px' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleInspectFile(f.name);
+                            }}
+                          >
+                            [ VIEW ]
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* File Content Preview */}
+              {selectedFile && (
+                <div style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: '#020502' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 700 }}>
+                      FILE PREVIEW: {selectedFile}
+                    </span>
+                    <button className="cli-btn cli-btn-muted" style={{ padding: '1px 5px', fontSize: '10px' }} onClick={() => setSelectedFile(null)}>
+                      CLOSE PREVIEW
+                    </button>
+                  </div>
+
+                  <textarea
+                    className="cli-input"
+                    style={{
+                      flex: 1,
+                      minHeight: '260px',
+                      fontFamily: 'monospace',
+                      fontSize: '11px',
+                      padding: '8px',
+                      resize: 'none',
+                      background: '#000',
+                      color: 'var(--primary)'
+                    }}
+                    readOnly
+                    value={fileContent}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* SFTP / SSH Connection Bar */}
+            <div style={{ padding: '10px 16px', background: '#050c05', borderTop: '1px solid var(--border)', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Terminal size={14} color="var(--primary)" />
+                <span className="text-muted">DIRECT SFTP COMMAND:</span>
+                <code style={{ color: 'var(--cyan)', fontSize: '11px' }}>{sftpCommand}</code>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="cli-btn"
+                  style={{ fontSize: '11px', padding: '4px 10px' }}
+                  onClick={() => handleCopy(sftpCommand, 'sftp')}
+                >
+                  {copiedKey === 'sftp' ? <Check size={12} /> : <Copy size={12} />}
+                  <span>{copiedKey === 'sftp' ? '[ COPIED SFTP ]' : '[ COPY SFTP ]'}</span>
+                </button>
+                <button
+                  className="cli-btn cli-btn-muted"
+                  style={{ fontSize: '11px', padding: '4px 10px' }}
+                  onClick={onClose}
+                >
+                  [ CLOSE ]
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

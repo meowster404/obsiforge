@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('mcServerAPI', {
   getPlayersData: (serverId) => ipcRenderer.invoke('server:get-players-data', serverId),
   savePlayersData: (serverId, type, data) => ipcRenderer.invoke('server:save-players-data', serverId, type, data),
   executePlayerAction: (serverId, action, payload) => ipcRenderer.invoke('server:player-action', serverId, action, payload),
+  applyAntiCheatShield: (serverId) => ipcRenderer.invoke('server:apply-anticheat-shield', serverId),
 
   // Mods & Plugins
   listAddons: (serverId) => ipcRenderer.invoke('server:list-addons', serverId),

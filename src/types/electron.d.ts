@@ -120,13 +120,14 @@ export interface McServerAPI {
   getProperties: (serverId: string) => Promise<Record<string, string>>;
   saveProperties: (serverId: string, properties: Record<string, string>) => Promise<boolean>;
   getWorldInfo: (serverId: string) => Promise<WorldInfo>;
-  resetWorld: (serverId: string, newSeed?: string) => Promise<{ success: boolean }>;
+  resetWorld: (serverId: string, newSeed?: string) => Promise<{ success: boolean; newSeed?: string }>;
   getRawFile: (serverId: string, fileName: string) => Promise<string>;
   saveRawFile: (serverId: string, fileName: string, content: string) => Promise<boolean>;
 
   getPlayersData: (serverId: string) => Promise<PlayersData>;
   savePlayersData: (serverId: string, type: 'ops' | 'whitelist' | 'bannedPlayers' | 'bannedIps', data: any) => Promise<boolean>;
   executePlayerAction: (serverId: string, action: string, payload: any) => Promise<{ success: boolean }>;
+  applyAntiCheatShield: (serverId: string) => Promise<{ success: boolean; message?: string }>;
 
   listAddons: (serverId: string) => Promise<AddonItem[]>;
   toggleAddon: (serverId: string, fileName: string, enable: boolean) => Promise<boolean>;

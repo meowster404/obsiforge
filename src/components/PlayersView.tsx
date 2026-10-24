@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ServerConfig, PlayersData } from '../types/electron';
-import { Users, Shield, UserX, AlertTriangle, UserCheck, ShieldAlert, Plus, Trash2, Ban } from 'lucide-react';
+import { Users, Shield, UserX, AlertTriangle, UserCheck, ShieldAlert, Plus, Trash2, Ban, ShieldCheck, EyeOff, Lock, CheckCircle } from 'lucide-react';
 
 import { ObsiUser } from '../services/neonAuth';
 
@@ -24,6 +24,8 @@ export const PlayersView: React.FC<PlayersViewProps> = ({ server, currentUser, o
 
   const [inputName, setInputName] = useState('');
   const [banReason, setBanReason] = useState('Violating server rules');
+  const [applyingShield, setApplyingShield] = useState(false);
+  const [shieldSuccessMsg, setShieldSuccessMsg] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!server) return;
@@ -130,6 +132,25 @@ export const PlayersView: React.FC<PlayersViewProps> = ({ server, currentUser, o
       }
       return p;
     }));
+  };
+
+  const handleApplyAntiCheatShield = async () => {
+    if (!server) return;
+    setApplyingShield(true);
+    setShieldSuccessMsg(null);
+    try {
+      const res = await window.mcServerAPI.applyAntiCheatShield(server.id);
+      if (res && res.success) {
+        setShieldSuccessMsg(res.message || 'Anti-Cheat & Exploit Hardening Shield successfully enforced!');
+        setTimeout(() => setShieldSuccessMsg(null), 5000);
+      } else {
+        alert('Failed applying anti-cheat shield: ' + (res?.message || 'Unknown error'));
+      }
+    } catch (e: any) {
+      alert('Error applying anti-cheat shield: ' + (e.message || e));
+    } finally {
+      setApplyingShield(false);
+    }
   };
 
   return (
@@ -449,6 +470,131 @@ export const PlayersView: React.FC<PlayersViewProps> = ({ server, currentUser, o
       {/* ========================================================================= */}
       {subTab === 'security' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Anti-Cheat & Exploit Hardening Shield */}
+          <div className="cli-pane" style={{ border: '1px solid var(--primary)', background: '#050f05' }}>
+            <div className="cli-pane-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0a1e0a' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldCheck size={16} color="var(--primary)" />
+                <span style={{ fontWeight: 800 }}>&gt; ANTI-CHEAT &amp; EXPLOIT HARDENING SHIELD</span>
+              </span>
+              <button
+                className="cli-btn"
+                style={{ fontSize: '11px', padding: '3px 12px', fontWeight: 800 }}
+                onClick={handleApplyAntiCheatShield}
+                disabled={applyingShield}
+                title="Apply Paper Anti-Xray mode 2 and server security properties"
+              >
+                <Lock size={12} />
+                <span>{applyingShield ? '[ HARDENING SERVER... ]' : '[ 🛡 ENFORCE ANTI-CHEAT SHIELD ]'}</span>
+              </button>
+            </div>
+
+            <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {shieldSuccessMsg && (
+                <div style={{
+                  padding: '8px 12px',
+                  background: 'rgba(51, 255, 0, 0.15)',
+                  border: '1px solid var(--primary)',
+                  color: 'var(--primary)',
+                  fontSize: '11px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <CheckCircle size={14} />
+                  <strong>{shieldSuccessMsg}</strong>
+                </div>
+              )}
+
+              <div style={{ fontSize: '11px', color: '#aaa', lineHeight: '1.5' }}>
+                ObsiForge applies rigorous server-side defenses by default to block common hack clients, cheat resource packs, and exploit tools without requiring complex manual YAML editing.
+              </div>
+
+              {/* Security Shield Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px' }}>
+                <div style={{ border: '1px solid var(--border)', padding: '10px', background: '#071207' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <EyeOff size={13} /> ANTI-XRAY ORE OBFUSCATION
+                    </span>
+                    <span className="text-primary" style={{ fontSize: '10px', fontWeight: 800 }}>[MODE 2 ACTIVE]</span>
+                  </div>
+                  <div className="text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
+                    Paper/Purpur native Engine Mode 2 scrambles hidden diamonds, ancient debris, emeralds, gold, and chests with fake ores, rendering X-Ray texture packs and Freecam blind.
+                  </div>
+                </div>
+
+                <div style={{ border: '1px solid var(--border)', padding: '10px', background: '#071207' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Lock size={13} /> FLIGHT HACK REJECTION
+                    </span>
+                    <span className="text-primary" style={{ fontSize: '10px', fontWeight: 800 }}>[ENFORCED]</span>
+                  </div>
+                  <div className="text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
+                    <code>allow-flight=false</code> rejects client-side flight, air-walking, and elytra speed exploits in survival mode.
+                  </div>
+                </div>
+
+                <div style={{ border: '1px solid var(--border)', padding: '10px', background: '#071207' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--cyan)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Shield size={13} /> PROXY &amp; BOTNET DEFENSE
+                    </span>
+                    <span className="text-cyan" style={{ fontSize: '10px', fontWeight: 800 }}>[ENFORCED]</span>
+                  </div>
+                  <div className="text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
+                    <code>prevent-proxy-connections=true</code> blocks anonymous proxies, TOR exit nodes, and automated bot accounts from flooding the server.
+                  </div>
+                </div>
+
+                <div style={{ border: '1px solid var(--border)', padding: '10px', background: '#071207' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <ShieldAlert size={13} /> PACKET RATE LIMITER
+                    </span>
+                    <span className="text-secondary" style={{ fontSize: '10px', fontWeight: 800 }}>[100 PKTS/S]</span>
+                  </div>
+                  <div className="text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
+                    <code>rate-limit=100</code> drops oversized packets, book exploits, and sign crashers before they can crash the JVM.
+                  </div>
+                </div>
+
+                <div style={{ border: '1px solid var(--border)', padding: '10px', background: '#071207' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)' }}>
+                      CHUNK DUPE RESISTANCE
+                    </span>
+                    <span className="text-primary" style={{ fontSize: '10px', fontWeight: 800 }}>[SYNC WRITES]</span>
+                  </div>
+                  <div className="text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
+                    <code>sync-chunk-writes=true</code> ensures synchronous disk flushes to prevent crash-induced chunk duplication glitches.
+                  </div>
+                </div>
+
+                <div style={{ border: '1px solid var(--border)', padding: '10px', background: '#071207' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)' }}>
+                      SPAWN RADIUS SECURITY
+                    </span>
+                    <span className="text-primary" style={{ fontSize: '10px', fontWeight: 800 }}>[16 BLOCKS]</span>
+                  </div>
+                  <div className="text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
+                    Protects the world spawn point from griefing or unauthorized block alteration by regular players.
+                  </div>
+                </div>
+              </div>
+
+              {/* Movement & Combat Anti-Cheat Recommendation */}
+              <div style={{ background: '#020702', padding: '10px 14px', border: '1px solid #143314', fontSize: '11px', marginTop: '4px' }}>
+                <span className="text-cyan" style={{ fontWeight: 800 }}>💡 COMBAT &amp; MOVEMENT HACK RECOMMENDATION: </span>
+                <span style={{ color: '#ccc' }}>
+                  For advanced combat hacking detection (Killaura, Reach, Speed, Jesus, Auto-Clicker), drop <strong>GrimAC</strong> (free, open-source predictive packet engine) into your <code>/plugins</code> folder, or <strong>Themis</strong> for Fabric/Forge.
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Cracked Warning Card */}
           {server && !server.onlineMode && (
             <div className="cli-pane" style={{ border: '1px solid var(--secondary)', background: '#140d02' }}>

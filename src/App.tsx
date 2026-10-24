@@ -216,7 +216,14 @@ export const App: React.FC = () => {
      * }
      */
 
-    setIsCloudDirModalOpen(true);
+    const hasOci = Boolean(ociConfig && ociConfig.instanceIp && ociConfig.instanceIp.trim());
+    if (hasOci) {
+      setIsCloudDirModalOpen(true);
+    } else if (currentServer?.serverDir && window.mcServerAPI) {
+      window.mcServerAPI.openFolder(currentServer.serverDir);
+    } else {
+      setIsCloudDirModalOpen(true);
+    }
   };
 
   // If user is not authenticated, render full-screen AuthGate

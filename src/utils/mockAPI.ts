@@ -182,8 +182,9 @@ export function initializeMockAPIIfNeeded() {
         ]
       }),
       resetWorld: async (_id, newSeed) => {
-        if (newSeed) mockProps['level-seed'] = newSeed;
-        return { success: true };
+        const seed = newSeed || `${Math.random() > 0.5 ? '' : '-'}${Math.floor(Math.random() * 8999999999999999 + 1000000000000000)}`;
+        mockProps['level-seed'] = seed;
+        return { success: true, newSeed: seed };
       },
       getRawFile: async () => Object.entries(mockProps).map(([k, v]) => `${k}=${v}`).join('\n'),
       saveRawFile: async () => true,
@@ -196,6 +197,7 @@ export function initializeMockAPIIfNeeded() {
       }),
       savePlayersData: async () => true,
       executePlayerAction: async () => ({ success: true }),
+      applyAntiCheatShield: async () => ({ success: true, message: 'Anti-cheat shield applied (Mock)' }),
 
       listAddons: async () => [
         { name: 'Lithium', fileName: 'lithium-fabric-0.12.7.jar', type: 'mod', enabled: true, sizeKb: 890, modified: Date.now() },

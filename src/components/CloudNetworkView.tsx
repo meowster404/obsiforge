@@ -293,28 +293,83 @@ echo "[OBSIFORGE] Public Join IP: ${ociConfig.instanceIp || 'YOUR_INSTANCE_IP'}:
         </div>
       </div>
 
-      {/* Subtabs with generous vertical padding to prevent top border clipping */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '6px 4px 10px 4px', gap: '8px', overflowX: 'auto', alignItems: 'center' }}>
+      {/* Subtabs Segmented Bar */}
+      <div style={{
+        display: 'flex',
+        border: '1px solid var(--border)',
+        background: '#070f07',
+        overflowX: 'auto',
+        alignItems: 'stretch'
+      }}>
         <button
-          className={`cli-btn ${subTab === 'oci_config' ? '' : 'cli-btn-muted'}`}
-          style={subTab === 'oci_config' ? { borderColor: 'var(--primary)', color: 'var(--primary)', background: 'rgba(51, 255, 0, 0.12)', boxShadow: '0 0 8px rgba(51, 255, 0, 0.25)' } : {}}
+          type="button"
           onClick={() => setSubTab('oci_config')}
+          style={{
+            background: subTab === 'oci_config' ? 'rgba(51, 255, 0, 0.15)' : 'transparent',
+            color: subTab === 'oci_config' ? 'var(--primary)' : 'var(--muted-text)',
+            border: 'none',
+            borderRight: '1px solid var(--border)',
+            borderBottom: subTab === 'oci_config' ? '2px solid var(--primary)' : '2px solid transparent',
+            padding: '10px 18px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.15s ease'
+          }}
         >
-          <Cloud size={13} /> [ 1. ORACLE CLOUD GUI CONFIG ]
+          <Cloud size={14} color={subTab === 'oci_config' ? 'var(--primary)' : 'var(--muted-text)'} />
+          <span>1. ORACLE CLOUD GUI CONFIG</span>
         </button>
+
         <button
-          className={`cli-btn ${subTab === 'scripts' ? '' : 'cli-btn-muted'}`}
-          style={subTab === 'scripts' ? { borderColor: 'var(--secondary)', color: 'var(--secondary)', background: 'rgba(255, 176, 0, 0.12)', boxShadow: '0 0 8px rgba(255, 176, 0, 0.25)' } : {}}
+          type="button"
           onClick={() => setSubTab('scripts')}
+          style={{
+            background: subTab === 'scripts' ? 'rgba(255, 176, 0, 0.15)' : 'transparent',
+            color: subTab === 'scripts' ? 'var(--secondary)' : 'var(--muted-text)',
+            border: 'none',
+            borderRight: '1px solid var(--border)',
+            borderBottom: subTab === 'scripts' ? '2px solid var(--secondary)' : '2px solid transparent',
+            padding: '10px 18px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.15s ease'
+          }}
         >
-          <Terminal size={13} /> [ 2. DYNAMIC FIREWALL &amp; SCRIPTS ]
+          <Terminal size={14} color={subTab === 'scripts' ? 'var(--secondary)' : 'var(--muted-text)'} />
+          <span>2. DYNAMIC FIREWALL &amp; SCRIPTS</span>
         </button>
+
         <button
-          className={`cli-btn ${subTab === 'tunnels' ? '' : 'cli-btn-muted'}`}
-          style={subTab === 'tunnels' ? { borderColor: 'var(--cyan)', color: 'var(--cyan)', background: 'rgba(0, 229, 255, 0.12)', boxShadow: '0 0 8px rgba(0, 229, 255, 0.25)' } : {}}
+          type="button"
           onClick={() => setSubTab('tunnels')}
+          style={{
+            background: subTab === 'tunnels' ? 'rgba(0, 229, 255, 0.15)' : 'transparent',
+            color: subTab === 'tunnels' ? 'var(--cyan)' : 'var(--muted-text)',
+            border: 'none',
+            borderBottom: subTab === 'tunnels' ? '2px solid var(--cyan)' : '2px solid transparent',
+            padding: '10px 18px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.15s ease'
+          }}
         >
-          <ShieldCheck size={13} /> [ 3. PLAYIT &amp; PINGGY TUNNELS ]
+          <ShieldCheck size={14} color={subTab === 'tunnels' ? 'var(--cyan)' : 'var(--muted-text)'} />
+          <span>3. PLAYIT &amp; PINGGY TUNNELS</span>
         </button>
       </div>
 

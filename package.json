@@ -1,7 +1,7 @@
 {
   "name": "obsiforge",
   "private": true,
-  "version": "1.0.1b",
+  "version": "1.0.2b",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "ObsiForge - Cyber-Industrial Terminal CLI Minecraft Server Core with Neon DB & Oracle Cloud Integration",
